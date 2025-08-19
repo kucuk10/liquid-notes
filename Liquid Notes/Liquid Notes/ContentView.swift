@@ -1,66 +1,38 @@
-//
-//  ContentView.swift
-//  Liquid Notes
-//
-//  Created by Caner Kucuk on 8/19/25.
-//
-
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var showCreationDialog = false
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
+        TabView {
+            RecentsView()
+                .tabItem { Label("Recents", systemImage: "clock") }
+            NoteListsView()
+                .tabItem { Label("Lists", systemImage: "folder") }
+            SearchView()
+                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button(action: { showCreationDialog = true }) {
+                    Image(systemName: "square.and.pencil")
                 }
-                .onDelete(perform: deleteItems)
-            }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
+                Button(action: {}) {
+                    Image(systemName: "gearshape")
                 }
             }
-        } detail: {
-            Text("Select an item")
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+        .confirmationDialog("New Notepad", isPresented: $showCreationDialog) {
+            ForEach(NotepadType.allCases) { type in
+                Button(type.rawValue) { createNote(type) }
             }
         }
     }
-}
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+    private func createNote(_ type: NotepadType) {
+        let newNote = Notepad(title: "", type: type)
+        modelContext.insert(newNote)
+    }
 }
