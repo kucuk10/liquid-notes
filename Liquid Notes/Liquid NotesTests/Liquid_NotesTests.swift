@@ -1,16 +1,10 @@
-//
-//  Liquid_NotesTests.swift
-//  Liquid NotesTests
-//
-//  Created by Caner Kucuk on 8/19/25.
-//
-
 import Testing
+@testable import Liquid_Notes
 
 struct Liquid_NotesTests {
-
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test func createNotepad() throws {
+        let note = Notepad(title: "Test", type: .postIt)
+        #expect(note.type == .postIt)
+        #expect(note.title == "Test")
     }
-
 }
