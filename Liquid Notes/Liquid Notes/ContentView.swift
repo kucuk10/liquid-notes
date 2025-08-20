@@ -15,6 +15,16 @@ struct ContentView: View {
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
         }
         .toolbar {
+            #if os(macOS)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { showCreationDialog = true }) {
+                    Image(systemName: "square.and.pencil")
+                }
+                Button(action: {}) {
+                    Image(systemName: "gearshape")
+                }
+            }
+            #else
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button(action: { showCreationDialog = true }) {
                     Image(systemName: "square.and.pencil")
@@ -23,6 +33,7 @@ struct ContentView: View {
                     Image(systemName: "gearshape")
                 }
             }
+            #endif
         }
         .confirmationDialog("New Notepad", isPresented: $showCreationDialog) {
             ForEach(NotepadType.allCases) { type in
