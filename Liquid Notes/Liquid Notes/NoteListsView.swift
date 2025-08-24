@@ -4,30 +4,59 @@ import SwiftData
 struct NoteListsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var folders: [Folder]
+    @Query private var notes: [Notepad]
     @State private var showingFolderSheet = false
     @State private var newFolderName = ""
+
+    private var postItNotes: [Notepad] { notes.filter { $0.type == .postIt } }
+    private var notebookNotes: [Notepad] { notes.filter { $0.type == .notebook } }
+    private var canvasNotes: [Notepad] { notes.filter { $0.type == .canvas } }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    NavigationLink {
-                        NotepadListView(filter: nil)
+                    DisclosureGroup {
+                        ForEach(notes) { note in
+                            NavigationLink {
+                                NotepadDetailView(note: note)
+                            } label: {
+                                Text(note.title.isEmpty ? "Untitled" : note.title)
+                            }
+                        }
                     } label: {
                         Label("All Notes", systemImage: "tray.full")
                     }
-                    NavigationLink {
-                        NotepadListView(filter: .postIt)
+                    DisclosureGroup {
+                        ForEach(postItNotes) { note in
+                            NavigationLink {
+                                NotepadDetailView(note: note)
+                            } label: {
+                                Text(note.title.isEmpty ? "Untitled" : note.title)
+                            }
+                        }
                     } label: {
                         Label("Post-It Notes", systemImage: "note.text")
                     }
-                    NavigationLink {
-                        NotepadListView(filter: .notebook)
+                    DisclosureGroup {
+                        ForEach(notebookNotes) { note in
+                            NavigationLink {
+                                NotepadDetailView(note: note)
+                            } label: {
+                                Text(note.title.isEmpty ? "Untitled" : note.title)
+                            }
+                        }
                     } label: {
                         Label("Notebooks", systemImage: "book.closed")
                     }
-                    NavigationLink {
-                        NotepadListView(filter: .canvas)
+                    DisclosureGroup {
+                        ForEach(canvasNotes) { note in
+                            NavigationLink {
+                                NotepadDetailView(note: note)
+                            } label: {
+                                Text(note.title.isEmpty ? "Untitled" : note.title)
+                            }
+                        }
                     } label: {
                         Label("Canvases", systemImage: "scribble")
                     }
@@ -35,8 +64,14 @@ struct NoteListsView: View {
                 if !folders.isEmpty {
                     Section("Folders") {
                         ForEach(folders) { folder in
-                            NavigationLink {
-                                FolderDetailView(folder: folder)
+                            DisclosureGroup {
+                                ForEach(folder.notes) { note in
+                                    NavigationLink {
+                                        NotepadDetailView(note: note)
+                                    } label: {
+                                        Text(note.title.isEmpty ? "Untitled" : note.title)
+                                    }
+                                }
                             } label: {
                                 Label(folder.name, systemImage: "folder")
                             }
@@ -89,27 +124,3 @@ struct NoteListsView: View {
     }
 }
 
-struct NotepadListView: View {
-    var filter: NotepadType?
-    @Query private var notes: [Notepad]
-
-    init(filter: NotepadType?) {
-        self.filter = filter
-        if let filter = filter {
-            _notes = Query(filter: #Predicate { $0.type == filter })
-        } else {
-            _notes = Query()
-        }
-    }
-
-    var body: some View {
-        List(notes) { note in
-            NavigationLink {
-                NotepadDetailView(note: note)
-            } label: {
-                Text(note.title.isEmpty ? "Untitled" : note.title)
-            }
-        }
-        .navigationTitle(filter?.rawValue ?? "All Notes")
-    }
-}
