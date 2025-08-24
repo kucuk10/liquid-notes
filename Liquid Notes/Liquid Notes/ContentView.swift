@@ -3,16 +3,20 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showCreationDialog = false
 
     var body: some View {
-        TabView {
-            RecentsView()
-                .tabItem { Label("Recents", systemImage: "clock") }
-            NoteListsView()
-                .tabItem { Label("Lists", systemImage: "folder") }
-            SearchView()
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+        Group {
+            #if os(macOS)
+            SidebarView()
+            #else
+            if horizontalSizeClass == .regular {
+                SidebarView()
+            } else {
+                tabInterface
+            }
+            #endif
         }
         .toolbar {
             #if os(macOS)
@@ -39,6 +43,17 @@ struct ContentView: View {
             ForEach(NotepadType.allCases) { type in
                 Button(type.rawValue) { createNote(type) }
             }
+        }
+    }
+
+    private var tabInterface: some View {
+        TabView {
+            RecentsView()
+                .tabItem { Label("Recents", systemImage: "clock") }
+            NoteListsView()
+                .tabItem { Label("Lists", systemImage: "folder") }
+            SearchView()
+                .tabItem { Label("Search", systemImage: "magnifyingglass") }
         }
     }
 
