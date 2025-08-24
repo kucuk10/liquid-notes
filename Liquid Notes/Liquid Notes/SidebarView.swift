@@ -5,31 +5,33 @@ struct SidebarView: View {
     @Query(sort: \Notepad.modified, order: .reverse) private var recentNotes: [Notepad]
     @Query private var folders: [Folder]
     @Query private var notes: [Notepad]
-    @State private var searchText = ""
-
-    private var filteredRecents: [Notepad] {
-        recentNotes.filter { matchesSearch($0) }
-    }
-
-    private var filteredNotes: [Notepad] {
-        notes.filter { matchesSearch($0) }
-    }
 
     var body: some View {
         NavigationSplitView {
             List {
-                Section("Recents") {
-                    ForEach(filteredRecents) { note in
+                NavigationLink {
+                    SearchView()
+                } label: {
+                    Label("Search", systemImage: "magnifyingglass")
+                }
+                Section {
+                    ForEach(recentNotes) { note in
                         NavigationLink {
                             NotepadDetailView(note: note)
                         } label: {
                             Text(title(for: note))
                         }
                     }
+                } header: {
+                    NavigationLink {
+                        RecentsView()
+                    } label: {
+                        Text("Recents")
+                    }
                 }
-                Section("Lists") {
+                Section {
                     DisclosureGroup {
-                        ForEach(filteredNotes) { note in
+                        ForEach(notes) { note in
                             NavigationLink {
                                 NotepadDetailView(note: note)
                             } label: {
@@ -40,7 +42,7 @@ struct SidebarView: View {
                         Label("All Notes", systemImage: "tray.full")
                     }
                     DisclosureGroup {
-                        ForEach(filteredNotes.filter { $0.type == .postIt }) { note in
+                        ForEach(notes.filter { $0.type == .postIt }) { note in
                             NavigationLink {
                                 NotepadDetailView(note: note)
                             } label: {
@@ -51,7 +53,7 @@ struct SidebarView: View {
                         Label("Post-It Notes", systemImage: "note.text")
                     }
                     DisclosureGroup {
-                        ForEach(filteredNotes.filter { $0.type == .notebook }) { note in
+                        ForEach(notes.filter { $0.type == .notebook }) { note in
                             NavigationLink {
                                 NotepadDetailView(note: note)
                             } label: {
@@ -62,7 +64,7 @@ struct SidebarView: View {
                         Label("Notebooks", systemImage: "book.closed")
                     }
                     DisclosureGroup {
-                        ForEach(filteredNotes.filter { $0.type == .canvas }) { note in
+                        ForEach(notes.filter { $0.type == .canvas }) { note in
                             NavigationLink {
                                 NotepadDetailView(note: note)
                             } label: {
@@ -72,12 +74,18 @@ struct SidebarView: View {
                     } label: {
                         Label("Canvases", systemImage: "scribble")
                     }
+                } header: {
+                    NavigationLink {
+                        NoteListsView()
+                    } label: {
+                        Text("Lists")
+                    }
                 }
                 if !folders.isEmpty {
                     Section("Folders") {
                         ForEach(folders) { folder in
                             DisclosureGroup {
-                                ForEach(folder.notes.filter { matchesSearch($0) }) { note in
+                                ForEach(folder.notes) { note in
                                     NavigationLink {
                                         NotepadDetailView(note: note)
                                     } label: {
@@ -91,16 +99,11 @@ struct SidebarView: View {
                     }
                 }
             }
-            .searchable(text: $searchText)
             .listStyle(.sidebar)
             .navigationTitle("Notes")
         } detail: {
             Text("Select a note")
         }
-    }
-
-    private func matchesSearch(_ note: Notepad) -> Bool {
-        searchText.isEmpty || note.title.localizedCaseInsensitiveContains(searchText)
     }
 
     private func title(for note: Notepad) -> String {
