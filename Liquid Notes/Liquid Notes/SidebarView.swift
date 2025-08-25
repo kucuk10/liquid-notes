@@ -84,14 +84,8 @@ struct SidebarView: View {
                 if !folders.isEmpty {
                     Section("Folders") {
                         ForEach(folders) { folder in
-                            DisclosureGroup {
-                                ForEach(folder.notes) { note in
-                                    NavigationLink {
-                                        NotepadDetailView(note: note)
-                                    } label: {
-                                        Text(title(for: note))
-                                    }
-                                }
+                            NavigationLink {
+                                FolderDetailView(folder: folder)
                             } label: {
                                 Label(folder.name, systemImage: "folder")
                             }

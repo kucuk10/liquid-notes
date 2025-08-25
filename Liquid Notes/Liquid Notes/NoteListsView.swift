@@ -64,14 +64,8 @@ struct NoteListsView: View {
                 if !folders.isEmpty {
                     Section("Folders") {
                         ForEach(folders) { folder in
-                            DisclosureGroup {
-                                ForEach(folder.notes) { note in
-                                    NavigationLink {
-                                        NotepadDetailView(note: note)
-                                    } label: {
-                                        Text(note.title.isEmpty ? "Untitled" : note.title)
-                                    }
-                                }
+                            NavigationLink {
+                                FolderDetailView(folder: folder)
                             } label: {
                                 Label(folder.name, systemImage: "folder")
                             }
