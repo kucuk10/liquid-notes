@@ -41,8 +41,11 @@ struct ContentView: View {
         }
         .confirmationDialog("New Notepad", isPresented: $showCreationDialog) {
             ForEach(NotepadType.allCases) { type in
-                Button(type.rawValue) { createNote(type) }
+                Button { createNote(type) } label: {
+                    Label(type.rawValue, systemImage: type.systemImageName)
+                }
             }
+            Button("Cancel", role: .cancel) { }
         }
     }
 
