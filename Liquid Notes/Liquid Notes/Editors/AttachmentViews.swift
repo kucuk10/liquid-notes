@@ -175,7 +175,7 @@ struct SketchEditorView: View {
     let onSave: (Data?) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var session = DrawingSession()
+    @State private var session = EditorSession(includesTextTool: false)
     @State private var data: Data?
 
     init(initialData: Data?, onSave: @escaping (Data?) -> Void) {
@@ -206,7 +206,11 @@ struct SketchEditorView: View {
                         dismiss()
                     }
                 }
-                DrawingToolbarItems(session: session)
+                ToolbarItem(placement: .primaryAction) {
+                    Toggle(isOn: $session.showsToolPicker) {
+                        Label("Apple Pencil Tools", systemImage: "pencil.tip.crop.circle")
+                    }
+                }
             }
             .onAppear { session.activeCanvasID = "sketch" }
         }

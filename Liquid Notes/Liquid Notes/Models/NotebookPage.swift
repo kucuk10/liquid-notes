@@ -20,6 +20,9 @@ final class NotebookPage {
 
     var notepad: Notepad?
 
+    @Relationship(deleteRule: .cascade, inverse: \PlacedItem.page)
+    var items: [PlacedItem]? = []
+
     init(index: Int, size: CGSize, pdfPageIndex: Int? = nil) {
         self.index = index
         self.width = size.width
@@ -31,6 +34,10 @@ final class NotebookPage {
 
     /// Whether the page has anything on it yet.
     var hasContent: Bool {
-        pdfPageIndex != nil || !(drawingData?.isEmpty ?? true)
+        pdfPageIndex != nil || !(drawingData?.isEmpty ?? true) || !(items?.isEmpty ?? true)
+    }
+
+    var sortedItems: [PlacedItem] {
+        (items ?? []).sorted { $0.created < $1.created }
     }
 }

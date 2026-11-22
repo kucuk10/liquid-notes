@@ -40,6 +40,14 @@ final class Notepad {
     /// Serialized `PKDrawing` data for the whole canvas.
     @Attribute(.externalStorage) var canvasDrawingData: Data?
 
+    /// Text boxes and images on the canvas.
+    @Relationship(deleteRule: .cascade, inverse: \PlacedItem.notepad)
+    var canvasItems: [PlacedItem]? = []
+
+    /// Saved views of the canvas. The first, "Origin", is where the canvas started.
+    @Relationship(deleteRule: .cascade, inverse: \CanvasScene.notepad)
+    var canvasScenes: [CanvasScene]? = []
+
     init(title: String = "", type: NotepadType, folder: Folder? = nil) {
         self.title = title
         self.typeRawValue = type.rawValue
@@ -73,6 +81,14 @@ final class Notepad {
 
     var sortedAttachments: [Attachment] {
         (attachments ?? []).sorted { $0.created < $1.created }
+    }
+
+    var sortedCanvasItems: [PlacedItem] {
+        (canvasItems ?? []).sorted { $0.created < $1.created }
+    }
+
+    var sortedScenes: [CanvasScene] {
+        (canvasScenes ?? []).sorted { ($0.order, $0.created) < ($1.order, $1.created) }
     }
 
     /// A short secondary line for library rows.

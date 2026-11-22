@@ -3,12 +3,27 @@ import SwiftData
 
 @main
 struct Liquid_NotesApp: App {
+    static let modelTypes: [any PersistentModel.Type] = [
+        Folder.self, Notepad.self, NotebookPage.self, Attachment.self, PlacedItem.self, CanvasScene.self,
+    ]
+
+    /// UI tests launch with `-uiTesting` to start from an empty library that isn't saved.
+    private let container: ModelContainer = {
+        let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: isUITesting)
+        do {
+            return try ModelContainer(for: Schema(Liquid_NotesApp.modelTypes), configurations: configuration)
+        } catch {
+            fatalError("Couldn't open the notes library: \(error)")
+        }
+    }()
+
     var body: some Scene {
         WindowGroup(id: "library") {
             ContentView()
         }
-        // SwiftData syncs through the iCloud container listed in the app's entitlements.
-        .modelContainer(for: [Folder.self, Notepad.self, NotebookPage.self, Attachment.self])
+        // SwiftData would sync through an iCloud container listed in the app's entitlements.
+        .modelContainer(container)
         .commands {
             LiquidNotesCommands()
         }

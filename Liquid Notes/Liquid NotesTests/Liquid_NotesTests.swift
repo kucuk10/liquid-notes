@@ -9,7 +9,7 @@ struct Liquid_NotesTests {
     private func makeContext() throws -> ModelContext {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(
-            for: Folder.self, Notepad.self, NotebookPage.self, Attachment.self,
+            for: Schema(Liquid_NotesApp.modelTypes),
             configurations: configuration
         )
         return ModelContext(container)
@@ -62,6 +62,80 @@ struct Liquid_NotesTests {
         notebook.sortedPages.last?.drawingData = Data([1, 2, 3])
         notebook.ensureTrailingBlankPage()
         #expect(notebook.sortedPages.map(\.index) == [0, 1])
+    }
+
+    @Test func textBoxOnLastPageAddsAnotherPage() throws {
+        let context = try makeContext()
+        let notebook = Notepad(title: "History", type: .notebook)
+        context.insert(notebook)
+        notebook.ensureTrailingBlankPage()
+        let page = try #require(notebook.sortedPages.first)
+
+        let textBox = PlacedItemFactory.textBox(at: CGPoint(x: 40, y: 40), in: page.size)
+        context.insert(textBox)
+        textBox.page = page
+        notebook.ensureTrailingBlankPage()
+
+        #expect(page.hasContent)
+        #expect(notebook.pages?.count == 2)
+        #expect(textBox.owningNotepad == notebook)
+    }
+
+    @Test func placedItemsStayOnTheSurface() {
+        let page = CGSize(width: 612, height: 792)
+        let clamped = PlacedItemFactory.clamped(CGRect(x: 500, y: -30, width: 300, height: 120), in: page)
+        #expect(clamped == CGRect(x: 312, y: 0, width: 300, height: 120))
+
+        let tall = PlacedItemFactory.fittedSize(for: CGSize(width: 1000, height: 2000), maxSide: 400)
+        #expect(tall == CGSize(width: 200, height: 400))
+
+        let small = PlacedItemFactory.fittedSize(for: CGSize(width: 100, height: 50), maxSide: 400)
+        #expect(small == CGSize(width: 100, height: 50))
+    }
+
+    @Test func tapSelectsTheMostRecentPhotoUnderIt() {
+        let older = PlacedItem(kind: .image, frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+        older.created = .now.addingTimeInterval(-60)
+        let newer = PlacedItem(kind: .image, frame: CGRect(x: 100, y: 100, width: 200, height: 200))
+        let text = PlacedItem(kind: .text, frame: CGRect(x: 0, y: 0, width: 400, height: 400))
+        let items = [older, newer, text]
+
+        // Where photos overlap, the one added later is on top.
+        #expect(PlacedItemFactory.topImage(at: CGPoint(x: 150, y: 150), in: items) === newer)
+        #expect(PlacedItemFactory.topImage(at: CGPoint(x: 50, y: 50), in: items) === older)
+        // Text boxes aren't photos, and empty space selects nothing.
+        #expect(PlacedItemFactory.topImage(at: CGPoint(x: 350, y: 350), in: items) == nil)
+    }
+
+    @Test func fontSizesStepLikeAWordProcessor() {
+        #expect(FontSizes.next(after: 12) == 14)
+        #expect(FontSizes.previous(before: 12) == 11)
+        #expect(FontSizes.next(after: 17) == 18)
+        #expect(FontSizes.next(after: 72) == 72)
+        #expect(FontSizes.previous(before: 8) == 8)
+        #expect(FontSizes.choices(including: 17).contains(17))
+        #expect(FontSizes.choices(including: 12) == FontSizes.standard)
+        #expect(FontSizes.label(for: 12) == "12")
+    }
+
+    @Test func fontSizeAppliesToSelectedText() throws {
+        var text = AttributedString("Essay title")
+        var selection = AttributedTextSelection(range: text.startIndex..<text.endIndex)
+        let target = RichTextTarget(
+            id: "test",
+            text: Binding { text } set: { text = $0 },
+            selection: Binding { selection } set: { selection = $0 },
+            defaultFont: .system(size: 12)
+        )
+        let context = EnvironmentValues().fontResolutionContext
+
+        #expect(FontSizes.pointSize(of: text, selection: selection, defaultFont: .system(size: 12), context: context) == 12)
+        target.apply(pointSize: 18, context: context)
+        #expect(FontSizes.pointSize(of: text, selection: selection, defaultFont: .system(size: 12), context: context) == 18)
+        target.toggleBold(context: context)
+        let font = try #require(text.runs.first?.font)
+        #expect(font.resolve(in: context).isBold)
+        #expect(font.resolve(in: context).pointSize == 18)
     }
 
     @Test func folderCollectionContainsOnlyItsNotepads() throws {

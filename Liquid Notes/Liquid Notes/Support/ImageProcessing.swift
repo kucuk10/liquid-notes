@@ -37,6 +37,23 @@ enum ImageProcessing {
         return output as Data
     }
 
+    /// The pixel dimensions of encoded image data, or `.zero` if they can't be read.
+    static func pixelSize(of data: Data) -> CGSize {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+              let height = properties[kCGImagePropertyPixelHeight] as? CGFloat
+        else { return .zero }
+        // EXIF orientations 5–8 are rotated by 90°.
+        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
+        return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+    }
+
+    /// Prepares every image that can be decoded, skipping the rest.
+    static func preparedImages(from items: [Data]) -> [Data] {
+        items.compactMap { preparedImageData(from: $0) }
+    }
+
     /// Decodes an image at a reduced size, respecting its EXIF orientation.
     static func thumbnail(from data: Data, maxPixelSize: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
@@ -46,6 +63,15 @@ enum ImageProcessing {
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
         ] as CFDictionary
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
+    }
+}
+
+/// An image dragged in from Photos, Files, Safari or another app.
+struct DroppedImage: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { DroppedImage(data: $0) }
     }
 }
 

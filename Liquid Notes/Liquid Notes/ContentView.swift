@@ -115,5 +115,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Folder.self, Notepad.self, NotebookPage.self, Attachment.self], inMemory: true)
+        .modelContainer(for: Liquid_NotesApp.modelTypes, inMemory: true)
 }
