@@ -38,9 +38,7 @@ struct NoteEditorView: View {
         }
         .background(.background)
         .navigationTitle(notepad.displayTitle)
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
         .editorToolbar(
             session: session,
             leadingTool: .sketch,

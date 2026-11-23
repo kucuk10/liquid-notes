@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 import PencilKit
 
@@ -11,6 +10,10 @@ enum PencilCanvasLayout: Equatable {
     case infinite(width: CGFloat)
     /// A very large space you can zoom and scroll in every direction, opening centered on `focus`.
     case world(CGSize, focus: CGPoint)
+
+    var isWorld: Bool {
+        if case .world = self { true } else { false }
+    }
 }
 
 /// The visible part of a world canvas. The items layer follows it so text boxes and images move with the ink,
@@ -94,6 +97,12 @@ struct PencilCanvasView: UIViewRepresentable {
     /// For world canvases: receives the scroll position and zoom as they change.
     var viewport: CanvasViewport?
 
+    /// Fingers, plus mouse and trackpad clicks on Mac and iPad, but never Apple Pencil, which draws.
+    private static let fingerAndPointerTouches = [
+        NSNumber(value: UITouch.TouchType.direct.rawValue),
+        NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
+    ]
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -133,7 +142,7 @@ struct PencilCanvasView: UIViewRepresentable {
         // A finger double-tap places a text box at any time, as a shortcut.
         let fingerDoubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.placeText(_:)))
         fingerDoubleTap.numberOfTapsRequired = 2
-        fingerDoubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        fingerDoubleTap.allowedTouchTypes = Self.fingerAndPointerTouches
         fingerDoubleTap.delegate = context.coordinator
         canvas.addGestureRecognizer(fingerDoubleTap)
         context.coordinator.fingerDoubleTap = fingerDoubleTap
@@ -141,7 +150,7 @@ struct PencilCanvasView: UIViewRepresentable {
         // A finger tap deselects text boxes and images. It also keeps PencilKit's own tap menu
         // (Select All, Insert Space) from appearing, since that menu has to wait for this to fail.
         let fingerTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.deselect(_:)))
-        fingerTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        fingerTap.allowedTouchTypes = Self.fingerAndPointerTouches
         fingerTap.require(toFail: fingerDoubleTap)
         fingerTap.delegate = context.coordinator
         canvas.addGestureRecognizer(fingerTap)
@@ -324,6 +333,7 @@ final class FittingCanvasView: PKCanvasView {
     /// Extra space below the lowest stroke on an infinite canvas, in drawing coordinates.
     private let overscroll: CGFloat = 800
     private var lastFittedWidth: CGFloat = 0
+    private var lastFittedHeight: CGFloat = 0
 
     // MARK: Drawing
 
@@ -365,9 +375,13 @@ final class FittingCanvasView: PKCanvasView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard bounds.width > 0, bounds.width != lastFittedWidth else { return }
+        // A world canvas also refits when only its height changes, such as when iPhone Duo folds.
+        let sizeChanged = bounds.width != lastFittedWidth || (layout.isWorld && bounds.height != lastFittedHeight)
+        guard bounds.width > 0, sizeChanged else { return }
         let isFirstLayout = lastFittedWidth == 0
+        let previousSize = CGSize(width: lastFittedWidth, height: lastFittedHeight)
         lastFittedWidth = bounds.width
+        lastFittedHeight = bounds.height
 
         switch layout {
         case .page(let size):
@@ -390,8 +404,11 @@ final class FittingCanvasView: PKCanvasView {
             if isFirstLayout {
                 showWorld(center: focus, zoom: 1)
             } else if zoomScale > 0 {
-                // The view was resized, such as on rotation; keep the same spot in the middle.
-                let center = worldPoint(for: CGPoint(x: contentOffset.x + bounds.width / 2, y: contentOffset.y + bounds.height / 2))
+                // The window was resized; keep what was in the middle before in the middle now.
+                let center = worldPoint(for: CGPoint(
+                    x: contentOffset.x + previousSize.width / 2,
+                    y: contentOffset.y + previousSize.height / 2
+                ))
                 showWorld(center: center, zoom: zoomScale)
             }
         }
@@ -409,4 +426,3 @@ final class FittingCanvasView: PKCanvasView {
         }
     }
 }
-#endif

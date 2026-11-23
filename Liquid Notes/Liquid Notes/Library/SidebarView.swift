@@ -48,14 +48,9 @@ struct SidebarView: View {
                 } label: {
                     Label("New Folder", systemImage: "folder.badge.plus")
                 }
-                #if os(macOS)
-                .buttonStyle(.borderless)
-                #endif
             }
         }
-        #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-        #endif
+        .navigationSplitViewColumnWidth(min: 180, ideal: 240)
         .navigationTitle("Liquid Notes")
         .alert("New Folder", isPresented: $isAddingFolder) {
             TextField("Name", text: $newFolderName)

@@ -53,10 +53,8 @@ struct NotebookView: View {
         }
         .background(.background.secondary)
         .navigationTitle($notepad.title)
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
-        #endif
         .editorToolbar(
             session: session,
             leadingTool: .pencil,
@@ -77,11 +75,9 @@ struct NotebookView: View {
             if notepad.pages?.isEmpty ?? true {
                 notepad.appendPage()
             }
-            #if canImport(UIKit)
             if session.activeCanvasID == nil {
                 session.activeCanvasID = notepad.sortedPages.first?.pageID
             }
-            #endif
         }
     }
 

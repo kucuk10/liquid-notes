@@ -11,33 +11,22 @@ struct CanvasNotepadView: View {
     /// The bounds of the ink, in canvas coordinates.
     @State private var drawingBounds: CGRect?
     @State private var isManagingScenes = false
+    @State private var viewport = CanvasViewport()
+    /// Where the canvas opens, decided once when it loads.
+    @State private var openingFocus: CGPoint?
 
     /// The size of the canvas. It's large enough to feel endless; new canvases open in the middle,
     /// so there's room to grow in every direction.
     static let worldSize = CGSize(width: 20_000, height: 20_000)
     private let canvasID = "canvas"
 
-    #if canImport(UIKit)
-    @State private var viewport = CanvasViewport()
-    /// Where the canvas opens, decided once when it loads.
-    @State private var openingFocus: CGPoint?
-    #else
-    @State private var zoom: CGFloat = 1
-    @State private var zoomAtGestureStart: CGFloat = 1
-    @State private var scrollPosition = ScrollPosition()
-    /// The visible part of the scroll view, in its content coordinates.
-    @State private var visibleScrollRect: CGRect = .zero
-    #endif
-
     var body: some View {
         content
             .background(.background)
             .navigationTitle($notepad.title)
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
             .ignoresSafeArea(.container, edges: .bottom)
-            #endif
             .editorToolbar(
                 session: session,
                 leadingTool: .pencil,
@@ -49,7 +38,7 @@ struct CanvasNotepadView: View {
                         onAdd: addScene,
                         onManage: { isManagingScenes = true }
                     )),
-                    AnyView(zoomMenu),
+                    AnyView(ViewportZoomMenu(viewport: viewport, onZoomToFit: zoomToFit)),
                 ],
                 onAddTextBox: { addTextBox(at: nil) },
                 onImportImages: { addImages($0, centeredAt: nil) }
@@ -62,10 +51,8 @@ struct CanvasNotepadView: View {
                 let bounds = await Task.detached { DrawingRenderer.drawing(from: data).bounds }.value
                 drawingBounds = bounds.isNull ? nil : bounds
                 ensureOriginScene()
-                #if canImport(UIKit)
                 if openingFocus == nil { openingFocus = initialFocus }
                 session.activeCanvasID = canvasID
-                #endif
             }
     }
 
@@ -73,7 +60,6 @@ struct CanvasNotepadView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if canImport(UIKit)
         if let openingFocus {
             ZStack(alignment: .topLeading) {
                 // Photos sit under the ink so you can draw on them.
@@ -117,12 +103,8 @@ struct CanvasNotepadView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        #else
-        macCanvas
-        #endif
     }
 
-    #if canImport(UIKit)
     private func itemsOverlay(_ layer: PlacedItemsLayer.Layer) -> some View {
         CanvasItemsOverlay(
             viewport: viewport,
@@ -133,65 +115,6 @@ struct CanvasNotepadView: View {
             onDelete: delete
         )
     }
-    #endif
-
-    @ViewBuilder
-    private var zoomMenu: some View {
-        #if canImport(UIKit)
-        ViewportZoomMenu(viewport: viewport, onZoomToFit: zoomToFit)
-        #else
-        CanvasZoomMenu(zoom: zoom, onSelect: { show(center: visibleCenter, zoom: $0) }, onZoomToFit: zoomToFit)
-        #endif
-    }
-
-    #if !canImport(UIKit)
-    /// On Mac the canvas shows the area around your content, scrolling both ways and zooming with a pinch.
-    private var macCanvas: some View {
-        let region = macRegion
-        return ScrollView([.horizontal, .vertical]) {
-            DrawingSurface(
-                canvasID: canvasID,
-                logicalSize: region.size,
-                origin: region.origin,
-                itemBounds: Self.worldSize,
-                displayWidth: region.width * zoom,
-                drawingData: notepad.canvasDrawingData,
-                items: notepad.sortedCanvasItems,
-                session: session,
-                onDrawingChange: { _ in },
-                onPlaceText: { addTextBox(at: $0) },
-                onDropImages: { addImages($0, centeredAt: $1) },
-                onDeleteItem: delete
-            ) {
-                Color.clear
-            }
-        }
-        .scrollPosition($scrollPosition)
-        .defaultScrollAnchor(.center)
-        .onScrollGeometryChange(for: CGRect.self) { geometry in
-            CGRect(origin: geometry.contentOffset, size: geometry.containerSize)
-        } action: { _, visible in
-            visibleScrollRect = visible
-        }
-        .gesture(
-            MagnifyGesture()
-                .onChanged { value in
-                    zoom = min(max(zoomAtGestureStart * value.magnification, 0.1), 4)
-                }
-                .onEnded { _ in zoomAtGestureStart = zoom }
-        )
-    }
-
-    private var macRegion: CGRect {
-        let world = CGRect(origin: .zero, size: Self.worldSize)
-        var base = contentBounds ?? CGRect(x: world.midX - 600, y: world.midY - 400, width: 1200, height: 800)
-        // Keep scenes reachable even if nothing has been drawn there.
-        for scene in notepad.sortedScenes {
-            base = base.union(CGRect(x: scene.centerX - 600, y: scene.centerY - 400, width: 1200, height: 800))
-        }
-        return base.insetBy(dx: -1500, dy: -1500).intersection(world)
-    }
-    #endif
 
     // MARK: Viewing
 
@@ -212,63 +135,20 @@ struct CanvasNotepadView: View {
 
     /// The middle of what's on screen, where toolbar-added items appear.
     private var visibleCenter: CGPoint {
-        #if canImport(UIKit)
         if !viewport.visibleRect.isEmpty { return viewport.visibleCenter }
         return openingFocus ?? initialFocus
-        #else
-        guard visibleScrollRect.width > 0 else { return CGPoint(x: macRegion.midX, y: macRegion.midY) }
-        return CGPoint(
-            x: macRegion.minX + visibleScrollRect.midX / zoom,
-            y: macRegion.minY + visibleScrollRect.midY / zoom
-        )
-        #endif
-    }
-
-    private var currentZoom: CGFloat {
-        #if canImport(UIKit)
-        viewport.zoomScale
-        #else
-        zoom
-        #endif
     }
 
     private func show(_ scene: CanvasScene) {
-        show(center: scene.center, zoom: scene.zoom)
-    }
-
-    private func show(center: CGPoint, zoom newZoom: CGFloat) {
-        #if canImport(UIKit)
-        viewport.show(center: center, zoom: newZoom)
-        #else
-        let clamped = min(max(newZoom, 0.1), 4)
-        let region = macRegion
-        withAnimation {
-            zoom = clamped
-            zoomAtGestureStart = clamped
-        }
-        // Scroll once the content has been laid out at the new zoom.
-        DispatchQueue.main.async {
-            let point = CGPoint(
-                x: max(0, (center.x - region.minX) * clamped - visibleScrollRect.width / 2),
-                y: max(0, (center.y - region.minY) * clamped - visibleScrollRect.height / 2)
-            )
-            withAnimation { scrollPosition.scrollTo(point: point) }
-        }
-        #endif
+        viewport.show(center: scene.center, zoom: scene.zoom)
     }
 
     private func zoomToFit() {
-        guard let content = contentBounds else {
-            show(center: visibleCenter, zoom: 1)
-            return
+        if let content = contentBounds {
+            viewport.fit(content)
+        } else {
+            viewport.show(center: visibleCenter, zoom: 1)
         }
-        #if canImport(UIKit)
-        viewport.fit(content)
-        #else
-        let padded = content.insetBy(dx: -80, dy: -80)
-        let fitZoom = min(visibleScrollRect.width / padded.width, visibleScrollRect.height / padded.height)
-        show(center: CGPoint(x: padded.midX, y: padded.midY), zoom: fitZoom)
-        #endif
     }
 
     // MARK: Scenes
@@ -286,7 +166,7 @@ struct CanvasNotepadView: View {
         let scene = CanvasScene(
             name: String(localized: "Scene \(scenes.count + 1)"),
             center: visibleCenter,
-            zoom: currentZoom,
+            zoom: viewport.zoomScale,
             order: (scenes.map(\.order).max() ?? -1) + 1
         )
         modelContext.insert(scene)

@@ -3,26 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
 
-#if canImport(UIKit)
-import UIKit
-typealias PlatformImage = UIImage
-#elseif canImport(AppKit)
-import AppKit
-typealias PlatformImage = NSImage
-#endif
-
-extension PlatformImage {
-    /// A `CGImage` representation that works on every platform.
-    var cgImageValue: CGImage? {
-        #if canImport(UIKit)
-        cgImage
-        #else
-        cgImage(forProposedRect: nil, context: nil, hints: nil)
-        #endif
-    }
-}
-
-/// Image helpers built on ImageIO so they behave the same on iOS, iPadOS and macOS.
+/// Image helpers built on ImageIO.
 enum ImageProcessing {
     /// Downscales and re-encodes an imported image so attachments stay small enough to sync quickly.
     static func preparedImageData(from data: Data, maxPixelSize: Int = 2048) -> Data? {

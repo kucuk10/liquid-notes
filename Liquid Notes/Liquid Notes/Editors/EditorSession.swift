@@ -1,7 +1,5 @@
 import SwiftUI
-#if canImport(UIKit)
 import PencilKit
-#endif
 
 /// Editing state shared by an editor's toolbar and its content: the PencilKit tool picker,
 /// the selected text box or image, and the text that formatting buttons apply to.
@@ -31,7 +29,6 @@ final class EditorSession {
         activeDrag?.itemID == item.itemID ? activeDrag : nil
     }
 
-    #if canImport(UIKit)
     /// One tool picker shared by every canvas in the editor, such as all pages of a notebook.
     let toolPicker: PKToolPicker
     /// Whether the PencilKit tools are shown.
@@ -69,9 +66,6 @@ final class EditorSession {
         return PKToolPicker()
         #endif
     }
-    #else
-    init(includesTextTool: Bool = true) {}
-    #endif
 
     /// Clears any state that refers to an item that's being deleted.
     func forget(_ item: PlacedItem) {

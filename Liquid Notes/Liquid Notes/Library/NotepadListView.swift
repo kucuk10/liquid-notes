@@ -60,9 +60,7 @@ struct NotepadListView: View {
         }
         .navigationTitle(isSearching ? String(localized: "Search") : collection.title)
         .searchable(text: $searchText, prompt: "Search all notepads")
-        #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 240, ideal: 300)
-        #endif
+        .navigationSplitViewColumnWidth(min: 240, ideal: 320)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NewNotepadMenu(preferredType: collection.preferredType, actions: actions)

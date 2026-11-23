@@ -155,6 +155,31 @@ final class Liquid_NotesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Add Page"].firstMatch.exists, "The menu can add a page")
     }
 
+    /// The library's New button works with a pointer as well as touch, on iPad and on Mac.
+    @MainActor
+    func testNewNoteButtonOpensAnEditor() throws {
+        let app = launchApp()
+        let newNote = app.buttons["New Note"].firstMatch
+        XCTAssertTrue(newNote.waitForExistence(timeout: 10), "The library shows a New Note button")
+        newNote.tap()
+        XCTAssertTrue(app.buttons["Sketch"].firstMatch.waitForExistence(timeout: 5) || app.buttons["More"].firstMatch.exists,
+                      "A new note opens in the editor")
+    }
+
+    /// The Mac has no Apple Pencil, so the canvas hides the Pencil tools there but keeps everything else.
+    @MainActor
+    func testCanvasToolbarMatchesThePlatform() throws {
+        let app = launchIntoNewCanvas()
+        XCTAssertTrue(app.buttons["Scenes"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["Undo"].firstMatch.exists)
+        let pencilTools = app.descendants(matching: .any)["Apple Pencil Tools"].firstMatch
+        #if targetEnvironment(macCatalyst)
+        XCTAssertFalse(pencilTools.exists, "There's no Apple Pencil on Mac")
+        #else
+        XCTAssertTrue(pencilTools.waitForExistence(timeout: 3), "iPad shows the Apple Pencil tools")
+        #endif
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {

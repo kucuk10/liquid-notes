@@ -113,7 +113,8 @@ private struct EditorToolbarModifier: ViewModifier {
                     ToolbarItem(placement: .primaryAction) { contextTools[1] }
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
-                #if canImport(UIKit)
+                // Drawing is Apple Pencil only, and PencilKit's tool picker doesn't appear on Mac.
+                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .primaryAction) { leadingButton }
                     .visibilityPriority(ToolbarItemVisibilityPriority(higherThan: .high))
                 ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -135,18 +136,15 @@ private struct EditorToolbarModifier: ViewModifier {
             ) { result in
                 if case .success(let urls) = result { importFiles(urls) }
             }
-            #if canImport(UIKit)
             .sheet(isPresented: $isSketching) {
                 SketchEditorView(initialData: nil) { data in
                     if let data { onSketch?(data) }
                 }
             }
-            #endif
     }
 
     // MARK: Pencil or Sketch
 
-    #if canImport(UIKit)
     @ViewBuilder
     private var leadingButton: some View {
         switch leadingTool {
@@ -160,7 +158,6 @@ private struct EditorToolbarModifier: ViewModifier {
             }
         }
     }
-    #endif
 
     // MARK: Text
 

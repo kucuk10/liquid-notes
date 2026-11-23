@@ -41,7 +41,6 @@ struct CanvasZoomMenu: View {
     }
 }
 
-#if canImport(UIKit)
 /// A canvas's text boxes and images, drawn above the ink and moved to match its scroll position and zoom.
 ///
 /// Only this view reads the viewport, so scrolling redraws the overlay without rebuilding the editor.
@@ -83,7 +82,6 @@ struct ViewportZoomMenu: View {
         CanvasZoomMenu(zoom: viewport.zoomScale, onSelect: viewport.setZoom, onZoomToFit: onZoomToFit)
     }
 }
-#endif
 
 /// Lists the canvas's scenes, like Freeform: jump to one, save the current view, or manage them.
 struct CanvasScenesMenu: View {
@@ -141,21 +139,14 @@ struct ScenesManagerSheet: View {
                 }
             }
             .navigationTitle("Scenes")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
-                #if os(iOS)
                 ToolbarItem(placement: .cancellationAction) { EditButton() }
-                #endif
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 360, minHeight: 360)
-        #endif
     }
 
     private func delete(at offsets: IndexSet) {

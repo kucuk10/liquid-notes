@@ -1,7 +1,7 @@
 import Foundation
 import PencilKit
 
-/// Converts stored `PKDrawing` data into images, for previews and for read-only display on Mac.
+/// Converts stored `PKDrawing` data into images, such as for sketch thumbnails.
 enum DrawingRenderer {
     static func drawing(from data: Data?) -> PKDrawing {
         guard let data, let drawing = try? PKDrawing(data: data) else { return PKDrawing() }
@@ -23,17 +23,10 @@ enum DrawingRenderer {
         guard !rect.isNull, !rect.isEmpty else { return nil }
 
         var result: CGImage?
-        #if canImport(UIKit)
         let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
         traits.performAsCurrent {
             result = drawing.image(from: rect, scale: scale).cgImage
         }
-        #else
-        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()
-        appearance.performAsCurrentDrawingAppearance {
-            result = drawing.image(from: rect, scale: scale).cgImageValue
-        }
-        #endif
         return result
     }
 }

@@ -57,12 +57,10 @@ struct ContentView: View {
         #endif
         .onChange(of: selectedNotepad) { previous, current in
             discardIfEmpty(previous)
-            #if os(iOS)
             // Writing and drawing get the whole screen; notes keep the list visible like Apple Notes.
             if let current, current.type != .notes {
                 columnVisibility = .detailOnly
             }
-            #endif
         }
         .sheet(isPresented: $isCreatingNotebook) {
             NotebookSetupSheet { title, size, style in

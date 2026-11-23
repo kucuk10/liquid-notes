@@ -48,9 +48,7 @@ struct NotebookSetupSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle("New Notebook")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) { dismiss() }
@@ -64,9 +62,6 @@ struct NotebookSetupSheet: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 420, minHeight: 520)
-        #endif
     }
 
     /// Letter is standard in North America and a few other regions; A4 everywhere else.

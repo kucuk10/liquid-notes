@@ -107,7 +107,6 @@ struct AttachmentViewer: View {
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        #if canImport(UIKit)
         if attachment.kind == .sketch {
             SketchEditorView(initialData: attachment.data) { data in
                 if let data {
@@ -118,9 +117,6 @@ struct AttachmentViewer: View {
         } else {
             viewer
         }
-        #else
-        viewer
-        #endif
     }
 
     private var viewer: some View {
@@ -153,22 +149,16 @@ struct AttachmentViewer: View {
                 }
             }
             .navigationTitle(attachment.filename)
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 600, minHeight: 500)
-        #endif
     }
 }
 
-#if canImport(UIKit)
 /// A full-screen sketch pad used for sketch attachments.
 struct SketchEditorView: View {
     let initialData: Data?
@@ -217,4 +207,3 @@ struct SketchEditorView: View {
         .interactiveDismissDisabled(data != initialData)
     }
 }
-#endif

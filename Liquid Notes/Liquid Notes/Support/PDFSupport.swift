@@ -23,7 +23,7 @@ enum PDFSupport {
         guard pageSize.width > 0 else { return nil }
         let scale = pixelWidth / pageSize.width
         let target = CGSize(width: pageSize.width * scale, height: pageSize.height * scale)
-        return page.thumbnail(of: target, for: .cropBox).cgImageValue
+        return page.thumbnail(of: target, for: .cropBox).cgImage
     }
 
     static func image(ofPage index: Int, in data: Data, pixelWidth: CGFloat) -> CGImage? {
@@ -79,7 +79,6 @@ struct PDFKitView: View {
     }
 }
 
-#if canImport(UIKit)
 private struct PDFKitRepresentable: UIViewRepresentable {
     let data: Data
 
@@ -92,17 +91,3 @@ private struct PDFKitRepresentable: UIViewRepresentable {
 
     func updateUIView(_ view: PDFView, context: Context) {}
 }
-#else
-private struct PDFKitRepresentable: NSViewRepresentable {
-    let data: Data
-
-    func makeNSView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.autoScales = true
-        view.document = PDFDocument(data: data)
-        return view
-    }
-
-    func updateNSView(_ view: PDFView, context: Context) {}
-}
-#endif
