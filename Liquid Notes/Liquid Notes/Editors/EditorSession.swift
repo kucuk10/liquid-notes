@@ -31,8 +31,13 @@ final class EditorSession {
 
     /// One tool picker shared by every canvas in the editor, such as all pages of a notebook.
     let toolPicker: PKToolPicker
-    /// Whether the PencilKit tools are shown.
-    var showsToolPicker = true
+    /// Whether the PencilKit tools are shown. On Mac they come and go with mouse drawing.
+    var showsToolPicker = !ProcessInfo.processInfo.isMacCatalystApp
+    /// Whether a mouse or trackpad draws, for Mac, which has no Apple Pencil. Otherwise only
+    /// Apple Pencil draws, and pointer clicks select and place text.
+    var drawsWithPointer = false {
+        didSet { showsToolPicker = drawsWithPointer }
+    }
     /// The canvas that receives the tool picker.
     var activeCanvasID: AnyHashable?
     /// Whether the picker's Text tool is selected, so taps place text boxes instead of drawing.

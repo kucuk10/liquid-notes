@@ -166,18 +166,24 @@ final class Liquid_NotesUITests: XCTestCase {
                       "A new note opens in the editor")
     }
 
-    /// The Mac has no Apple Pencil, so the canvas hides the Pencil tools there but keeps everything else.
+    /// The Mac has no Apple Pencil, so the canvas offers mouse drawing there instead of the Pencil tools.
     @MainActor
     func testCanvasToolbarMatchesThePlatform() throws {
         let app = launchIntoNewCanvas()
         XCTAssertTrue(app.buttons["Scenes"].firstMatch.exists)
         XCTAssertTrue(app.buttons["Undo"].firstMatch.exists)
         let pencilTools = app.descendants(matching: .any)["Apple Pencil Tools"].firstMatch
+        let mouseDrawing = app.descendants(matching: .any)["Draw with Mouse"].firstMatch
         #if targetEnvironment(macCatalyst)
+        XCTAssertTrue(mouseDrawing.waitForExistence(timeout: 3), "Mac offers drawing with the mouse")
         XCTAssertFalse(pencilTools.exists, "There's no Apple Pencil on Mac")
         #else
         XCTAssertTrue(pencilTools.waitForExistence(timeout: 3), "iPad shows the Apple Pencil tools")
+        XCTAssertFalse(mouseDrawing.exists)
         #endif
+
+        // Undo and Redo are the same size.
+        XCTAssertEqual(app.buttons["Undo"].firstMatch.frame.size, app.buttons["Redo"].firstMatch.frame.size)
     }
 
     @MainActor

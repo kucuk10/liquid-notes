@@ -9,13 +9,25 @@ struct UndoRedoButtons: View {
     @State private var canRedo = false
 
     var body: some View {
-        Button("Undo", systemImage: "arrow.uturn.backward") { undoManager?.undo() }
+        historyButton("Undo", systemImage: "arrow.uturn.backward") { undoManager?.undo() }
             .disabled(!canUndo)
-        Button("Redo", systemImage: "arrow.uturn.forward") { undoManager?.redo() }
+        historyButton("Redo", systemImage: "arrow.uturn.forward") { undoManager?.redo() }
             .disabled(!canRedo)
             .task(id: undoManager.map(ObjectIdentifier.init)) {
                 await watchUndoManager()
             }
+    }
+
+    /// Both buttons get the same fixed icon frame so they're the same size side by side.
+    private func historyButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: systemImage)
+                    .frame(width: 24, height: 24)
+            }
+        }
     }
 
     /// Keeps the buttons' enabled state in step with the undo history.
@@ -39,9 +51,27 @@ struct UndoRedoButtons: View {
     }
 }
 
+/// Turns drawing tools on and off. On iPad, Apple Pencil always draws and this shows the
+/// PencilKit tools. Mac has no Apple Pencil, so there it turns drawing with the mouse on and off.
+struct DrawingToolsToggle: View {
+    @Bindable var session: EditorSession
+
+    var body: some View {
+        if ProcessInfo.processInfo.isMacCatalystApp {
+            Toggle(isOn: $session.drawsWithPointer) {
+                Label("Draw with Mouse", systemImage: "hand.draw")
+            }
+        } else {
+            Toggle(isOn: $session.showsToolPicker) {
+                Label("Apple Pencil Tools", systemImage: "pencil.tip.crop.circle")
+            }
+        }
+    }
+}
+
 /// The first button in the editor toolbar.
 enum LeadingEditorTool {
-    /// Shows and hides the PencilKit tools (notebooks and canvases).
+    /// Turns the drawing tools on and off (notebooks and canvases).
     case pencil
     /// Opens the sketch pad and saves the sketch as an attachment (notes).
     case sketch
@@ -113,12 +143,9 @@ private struct EditorToolbarModifier: ViewModifier {
                     ToolbarItem(placement: .primaryAction) { contextTools[1] }
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
-                // Drawing is Apple Pencil only, and PencilKit's tool picker doesn't appear on Mac.
-                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .primaryAction) { leadingButton }
                     .visibilityPriority(ToolbarItemVisibilityPriority(higherThan: .high))
                 ToolbarSpacer(.fixed, placement: .primaryAction)
-                #endif
                 ToolbarItemGroup(placement: .primaryAction) { textTools }
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 ToolbarItemGroup(placement: .primaryAction) { attachmentTools }
@@ -149,9 +176,7 @@ private struct EditorToolbarModifier: ViewModifier {
     private var leadingButton: some View {
         switch leadingTool {
         case .pencil:
-            Toggle(isOn: $session.showsToolPicker) {
-                Label("Apple Pencil Tools", systemImage: "pencil.tip.crop.circle")
-            }
+            DrawingToolsToggle(session: session)
         case .sketch:
             Button("Sketch", systemImage: "pencil.and.scribble") {
                 isSketching = true

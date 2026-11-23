@@ -197,9 +197,7 @@ struct SketchEditorView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Toggle(isOn: $session.showsToolPicker) {
-                        Label("Apple Pencil Tools", systemImage: "pencil.tip.crop.circle")
-                    }
+                    DrawingToolsToggle(session: session)
                 }
             }
             .onAppear { session.activeCanvasID = "sketch" }

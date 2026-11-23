@@ -114,13 +114,6 @@ struct PencilCanvasView: UIViewRepresentable {
         canvas.isOpaque = false
         canvas.delegate = context.coordinator
         canvas.contentInsetAdjustmentBehavior = .never
-        canvas.drawingPolicy = .pencilOnly
-        #if DEBUG
-        // UI tests run in the simulator, which has no Apple Pencil.
-        if ProcessInfo.processInfo.arguments.contains("-uiTestingFingerDrawing") {
-            canvas.drawingPolicy = .anyInput
-        }
-        #endif
         if alwaysLight {
             canvas.overrideUserInterfaceStyle = .light
         }
@@ -172,6 +165,8 @@ struct PencilCanvasView: UIViewRepresentable {
             canvas.setWorldDrawing(DrawingRenderer.drawing(from: drawingData))
         }
 
+        canvas.drawingPolicy = drawsWithAnyInput ? .anyInput : .pencilOnly
+
         // With the Text tool selected, taps place text boxes instead of drawing.
         let placesText = session.isTextToolSelected && onPlaceText != nil
         canvas.drawingGestureRecognizer.isEnabled = !placesText
@@ -190,6 +185,15 @@ struct PencilCanvasView: UIViewRepresentable {
             DispatchQueue.main.async { canvas.becomeFirstResponder() }
         }
         context.coordinator.wantsTools = wantsTools
+    }
+
+    /// Apple Pencil always draws. A mouse or trackpad draws only when you turn that on.
+    private var drawsWithAnyInput: Bool {
+        #if DEBUG
+        // UI tests run in the simulator, which has no Apple Pencil.
+        if ProcessInfo.processInfo.arguments.contains("-uiTestingFingerDrawing") { return true }
+        #endif
+        return session.drawsWithPointer
     }
 
     static func dismantleUIView(_ canvas: FittingCanvasView, coordinator: Coordinator) {
