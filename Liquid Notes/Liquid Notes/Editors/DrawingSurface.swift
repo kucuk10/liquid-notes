@@ -62,10 +62,13 @@ struct DrawingSurface<Background: View>: View {
         }
         .frame(width: displayWidth, height: logicalSize.height * scale, alignment: .topLeading)
         .dropDestination(for: DroppedImage.self) { images, location in
-            let prepared = ImageProcessing.preparedImages(from: images.map(\.data))
-            guard !prepared.isEmpty else { return false }
-            onDropImages(prepared, logicalPoint(location))
-            return true
+            let point = logicalPoint(location)
+            let originals = images.map(\.data)
+            Task {
+                let prepared = await ImageProcessing.preparedImagesInBackground(from: originals)
+                if !prepared.isEmpty { onDropImages(prepared, point) }
+            }
+            return !images.isEmpty
         }
     }
 

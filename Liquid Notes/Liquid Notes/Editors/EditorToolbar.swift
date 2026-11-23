@@ -99,8 +99,11 @@ private struct EditorToolbarModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
+            // When the toolbar runs out of room, such as on the side of iPhone Duo's outer display,
+            // lower-priority groups move into the overflow menu first.
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) { UndoRedoButtons() }
+                    .visibilityPriority(.high)
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 if contextTools.indices.contains(0) {
                     ToolbarItem(placement: .primaryAction) { contextTools[0] }
@@ -112,11 +115,13 @@ private struct EditorToolbarModifier: ViewModifier {
                 }
                 #if canImport(UIKit)
                 ToolbarItem(placement: .primaryAction) { leadingButton }
+                    .visibilityPriority(ToolbarItemVisibilityPriority(higherThan: .high))
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 #endif
                 ToolbarItemGroup(placement: .primaryAction) { textTools }
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 ToolbarItemGroup(placement: .primaryAction) { attachmentTools }
+                    .visibilityPriority(.low)
             }
             .photosPicker(isPresented: $isPickingPhotos, selection: $photoItems, matching: .images)
             .onChange(of: photoItems) { _, items in
@@ -293,23 +298,26 @@ private struct EditorToolbarModifier: ViewModifier {
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) async {
-        var images: [Data] = []
+        var originals: [Data] = []
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let prepared = ImageProcessing.preparedImageData(from: data) {
-                images.append(prepared)
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                originals.append(data)
             }
         }
         photoItems = []
+        let images = await ImageProcessing.preparedImagesInBackground(from: originals)
         if !images.isEmpty { onImportImages(images) }
     }
 
     private func importFiles(_ urls: [URL]) {
-        let images = urls.compactMap { url -> Data? in
+        let originals = urls.compactMap { url -> Data? in
             let didAccess = url.startAccessingSecurityScopedResource()
             defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-            return (try? Data(contentsOf: url)).flatMap { ImageProcessing.preparedImageData(from: $0) }
+            return try? Data(contentsOf: url)
         }
-        if !images.isEmpty { onImportImages(images) }
+        Task {
+            let images = await ImageProcessing.preparedImagesInBackground(from: originals)
+            if !images.isEmpty { onImportImages(images) }
+        }
     }
 }

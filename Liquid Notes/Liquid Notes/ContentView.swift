@@ -44,6 +44,17 @@ struct ContentView: View {
             }
         }
         .focusedSceneValue(\.libraryActions, actions)
+        #if DEBUG
+        .task {
+            // Lets UI tests and performance checks start straight in a new notepad.
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-uiTestingOpenNewCanvas") {
+                actions.newNotepad(.canvas)
+            } else if arguments.contains("-uiTestingOpenNewNotebook") {
+                actions.newNotepad(.notebook)
+            }
+        }
+        #endif
         .onChange(of: selectedNotepad) { previous, current in
             discardIfEmpty(previous)
             #if os(iOS)

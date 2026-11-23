@@ -91,6 +91,7 @@ struct PlacedItemView: View {
     let session: EditorSession
     let onDelete: () -> Void
 
+    @Environment(\.undoManager) private var undoManager
     private let minimumSize = CGSize(width: 60, height: 40)
 
     private var isSelected: Bool { session.selectedItemID == item.itemID }
@@ -194,11 +195,9 @@ struct PlacedItemView: View {
             }
             .onEnded { value in
                 let moved = item.frame.offsetBy(dx: value.translation.width, dy: value.translation.height)
-                let clamped = PlacedItemFactory.clamped(moved, in: bounds)
-                item.x = clamped.minX
-                item.y = clamped.minY
+                let actionName = item.kind == .image ? String(localized: "Move Image") : String(localized: "Move Text Box")
+                PlacedItemUndo.setFrame(item, to: PlacedItemFactory.clamped(moved, in: bounds), undoManager: undoManager, actionName: actionName)
                 session.activeDrag = nil
-                item.owningNotepad?.touch()
             }
     }
 
@@ -208,10 +207,15 @@ struct PlacedItemView: View {
                 session.activeDrag = EditorSession.ItemDrag(itemID: item.itemID, resize: value.translation)
             }
             .onEnded { value in
-                item.width = min(max(minimumSize.width, item.width + value.translation.width), bounds.width - item.x)
-                item.height = min(max(minimumSize.height, item.height + value.translation.height), bounds.height - item.y)
+                let resized = CGRect(
+                    x: item.x,
+                    y: item.y,
+                    width: min(max(minimumSize.width, item.width + value.translation.width), bounds.width - item.x),
+                    height: min(max(minimumSize.height, item.height + value.translation.height), bounds.height - item.y)
+                )
+                let actionName = item.kind == .image ? String(localized: "Resize Image") : String(localized: "Resize Text Box")
+                PlacedItemUndo.setFrame(item, to: resized, undoManager: undoManager, actionName: actionName)
                 session.activeDrag = nil
-                item.owningNotepad?.touch()
             }
     }
 }

@@ -54,6 +54,11 @@ enum ImageProcessing {
         items.compactMap { preparedImageData(from: $0) }
     }
 
+    /// Prepares images in the background, since decoding and resizing large photos takes a moment.
+    static func preparedImagesInBackground(from items: [Data]) async -> [Data] {
+        await Task.detached(priority: .userInitiated) { preparedImages(from: items) }.value
+    }
+
     /// Decodes an image at a reduced size, respecting its EXIF orientation.
     static func thumbnail(from data: Data, maxPixelSize: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }

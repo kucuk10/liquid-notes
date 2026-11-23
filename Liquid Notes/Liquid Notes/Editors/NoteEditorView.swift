@@ -50,9 +50,9 @@ struct NoteEditorView: View {
             onImportImages: addImages
         )
         .dropDestination(for: DroppedImage.self) { images, _ in
-            let prepared = ImageProcessing.preparedImages(from: images.map(\.data))
-            addImages(prepared)
-            return !prepared.isEmpty
+            let originals = images.map(\.data)
+            Task { addImages(await ImageProcessing.preparedImagesInBackground(from: originals)) }
+            return !images.isEmpty
         }
         .onChange(of: text) { _, newValue in
             notepad.updateRichText(newValue)

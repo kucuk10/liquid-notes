@@ -6,6 +6,7 @@ import SwiftData
 struct CanvasNotepadView: View {
     @Bindable var notepad: Notepad
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.undoManager) private var undoManager
     @State private var session = EditorSession()
     /// The bounds of the ink, in canvas coordinates.
     @State private var drawingBounds: CGRect?
@@ -104,10 +105,13 @@ struct CanvasNotepadView: View {
             }
             .clipped()
             .dropDestination(for: DroppedImage.self) { images, location in
-                let prepared = ImageProcessing.preparedImages(from: images.map(\.data))
-                guard !prepared.isEmpty else { return false }
-                addImages(prepared, centeredAt: viewport.canvasPoint(forViewPoint: location))
-                return true
+                let point = viewport.canvasPoint(forViewPoint: location)
+                let originals = images.map(\.data)
+                Task {
+                    let prepared = await ImageProcessing.preparedImagesInBackground(from: originals)
+                    if !prepared.isEmpty { addImages(prepared, centeredAt: point) }
+                }
+                return !images.isEmpty
             }
         } else {
             ProgressView()
@@ -315,16 +319,19 @@ struct CanvasNotepadView: View {
     }
 
     private func insert(_ items: [PlacedItem]) {
-        for item in items {
-            modelContext.insert(item)
-            item.notepad = notepad
-        }
+        let isImage = items.first?.kind == .image
+        PlacedItemUndo.insert(
+            items,
+            onCanvas: notepad,
+            context: modelContext,
+            undoManager: undoManager,
+            actionName: isImage ? String(localized: "Add Image") : String(localized: "Add Text Box")
+        )
         notepad.touch()
     }
 
     private func delete(_ item: PlacedItem) {
         session.forget(item)
-        modelContext.delete(item)
-        notepad.touch()
+        PlacedItemUndo.delete(item, context: modelContext, undoManager: undoManager)
     }
 }

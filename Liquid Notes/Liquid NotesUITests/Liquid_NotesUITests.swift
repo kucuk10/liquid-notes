@@ -15,36 +15,64 @@ final class Liquid_NotesUITests: XCTestCase {
 
     /// Launches with an empty library that isn't saved.
     @MainActor
-    private func launchApp() -> XCUIApplication {
+    private func launchApp(_ extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
+        app.launchArguments = ["-uiTesting"] + extraArguments
         app.launch()
         return app
     }
 
-    /// Opens a new canvas from the sidebar's Canvases collection.
+    /// Launches straight into a new, empty canvas.
     @MainActor
-    private func openNewCanvas(in app: XCUIApplication) {
-        // The row's label includes its count badge, such as "Canvases, 0".
-        let canvases = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Canvases")).firstMatch
-        XCTAssertTrue(canvases.waitForExistence(timeout: 5), "Canvases collection should be in the sidebar")
-        canvases.tap()
+    private func launchIntoNewCanvas(_ extraArguments: [String] = []) -> XCUIApplication {
+        let app = launchApp(["-uiTestingOpenNewCanvas"] + extraArguments)
+        XCTAssertTrue(app.buttons["Zoom"].firstMatch.waitForExistence(timeout: 10), "The new canvas should open")
+        return app
+    }
 
-        let newCanvas = app.buttons["New Canvas"].firstMatch
-        XCTAssertTrue(newCanvas.waitForExistence(timeout: 5), "Empty Canvases list should offer New Canvas")
-        newCanvas.tap()
+    /// Taps a toolbar button, looking in the toolbar's overflow menu if there wasn't room for it.
+    @MainActor
+    private func tapToolbarButton(_ label: String, in app: XCUIApplication) {
+        let button = app.buttons[label].firstMatch
+        if !button.waitForExistence(timeout: 2) {
+            app.buttons["More"].firstMatch.tap()
+        }
+        XCTAssertTrue(app.buttons[label].firstMatch.waitForExistence(timeout: 3), "\(label) should be in the toolbar")
+        app.buttons[label].firstMatch.tap()
+    }
+
+    /// Regression test: drawing on a canvas used to need a canvas-sized GPU texture, which crashed the
+    /// app on the first stroke. Draws at several zoom levels and checks the app is still running.
+    @MainActor
+    func testDrawingOnCanvasAtAnyZoomDoesNotCrash() throws {
+        // The simulator has no Apple Pencil, so this test allows drawing with a finger.
+        let app = launchIntoNewCanvas(["-uiTestingFingerDrawing"])
+        let zoomButton = app.buttons["Zoom"].firstMatch
+
+        func drawStroke() {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.45))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.6))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+
+        drawStroke()
+        for level in ["400%", "10%"] {
+            zoomButton.tap()
+            app.buttons[level].firstMatch.tap()
+            drawStroke()
+        }
+
+        XCTAssertEqual(app.state, .runningForeground, "Drawing shouldn't crash the app")
+        let undo = app.buttons["Undo"].firstMatch
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        XCTAssertTrue(undo.isEnabled, "Strokes should be undoable")
     }
 
     @MainActor
     func testDoubleTapOnCanvasAddsTypableTextBox() throws {
-        let app = launchApp()
-        openNewCanvas(in: app)
+        let app = launchIntoNewCanvas()
 
-        // Give the canvas a moment to open on its Origin scene.
-        let zoomButton = app.buttons["Zoom"].firstMatch
-        XCTAssertTrue(zoomButton.waitForExistence(timeout: 5), "Canvas should show its zoom level")
-
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.55)).doubleTap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)).doubleTap()
 
         let textBox = app.textViews["Text box"].firstMatch
         XCTAssertTrue(textBox.waitForExistence(timeout: 5), "Double-tapping the canvas should add a text box")
@@ -56,13 +84,11 @@ final class Liquid_NotesUITests: XCTestCase {
 
     @MainActor
     func testAddTextBoxButtonOnCanvasAddsTypableTextBox() throws {
-        let app = launchApp()
-        openNewCanvas(in: app)
+        let app = launchIntoNewCanvas()
 
         // On narrow layouts the button is inside the Text menu.
-        let addButton = app.buttons["Add Text Box"].firstMatch
-        if !addButton.waitForExistence(timeout: 3) {
-            app.buttons["Text"].firstMatch.tap()
+        if !app.buttons["Add Text Box"].firstMatch.waitForExistence(timeout: 2) {
+            tapToolbarButton("Text", in: app)
         }
         app.buttons["Add Text Box"].firstMatch.tap()
 
@@ -75,11 +101,9 @@ final class Liquid_NotesUITests: XCTestCase {
 
     @MainActor
     func testZoomMenuChangesZoomLevel() throws {
-        let app = launchApp()
-        openNewCanvas(in: app)
+        let app = launchIntoNewCanvas()
 
         let zoomButton = app.buttons["Zoom"].firstMatch
-        XCTAssertTrue(zoomButton.waitForExistence(timeout: 5))
         XCTAssertEqual(zoomButton.value as? String, "100 percent", "New canvases open at 100%")
 
         zoomButton.tap()
@@ -91,8 +115,7 @@ final class Liquid_NotesUITests: XCTestCase {
 
     @MainActor
     func testScenesStartWithOriginAndCanAddCurrentView() throws {
-        let app = launchApp()
-        openNewCanvas(in: app)
+        let app = launchIntoNewCanvas()
 
         let scenesButton = app.buttons["Scenes"].firstMatch
         XCTAssertTrue(scenesButton.waitForExistence(timeout: 5))
@@ -119,12 +142,11 @@ final class Liquid_NotesUITests: XCTestCase {
 
     @MainActor
     func testNotebookPaperStyleCanBeChanged() throws {
-        let app = launchApp()
-        let notebooks = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Notebooks")).firstMatch
-        XCTAssertTrue(notebooks.waitForExistence(timeout: 5))
-        notebooks.tap()
-        app.buttons["New Notebook"].firstMatch.tap()
-        app.buttons["Create"].firstMatch.tap()
+        // Opens the New Notebook sheet directly.
+        let app = launchApp(["-uiTestingOpenNewNotebook"])
+        let create = app.buttons["Create"].firstMatch
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "The New Notebook sheet should open")
+        create.tap()
 
         let paperStyle = app.buttons["Paper Style"].firstMatch
         XCTAssertTrue(paperStyle.waitForExistence(timeout: 5), "Notebooks show the paper style button")

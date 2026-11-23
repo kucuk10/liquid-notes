@@ -18,69 +18,46 @@ enum PencilCanvasLayout: Equatable {
 @MainActor
 @Observable
 final class CanvasViewport {
-    /// The scroll position, in zoomed points. Observed by the items layer so it tracks scrolling.
-    var contentOffset: CGPoint = .zero
+    /// The world coordinate at the top-leading corner of the screen. Observed by the items layer.
+    var visibleOrigin: CGPoint = .zero
     /// Observed by the items layer and the toolbar's zoom percentage.
     var zoomScale: CGFloat = 1
     /// The canvas view's size on screen.
     @ObservationIgnored var viewSize: CGSize = .zero
+    @ObservationIgnored weak var canvas: FittingCanvasView?
 
     static let minimumZoom: CGFloat = 0.1
     static let maximumZoom: CGFloat = 4
 
-    @ObservationIgnored weak var scrollView: UIScrollView?
-    @ObservationIgnored var worldSize: CGSize = .zero
-
-    /// The visible area in canvas coordinates.
+    /// The visible area in world coordinates.
     var visibleRect: CGRect {
         guard zoomScale > 0 else { return .zero }
-        return CGRect(
-            x: contentOffset.x / zoomScale,
-            y: contentOffset.y / zoomScale,
-            width: viewSize.width / zoomScale,
-            height: viewSize.height / zoomScale
-        )
+        return CGRect(origin: visibleOrigin, size: CGSize(width: viewSize.width / zoomScale, height: viewSize.height / zoomScale))
     }
 
     var visibleCenter: CGPoint {
         CGPoint(x: visibleRect.midX, y: visibleRect.midY)
     }
 
-    /// Converts a point in the canvas view (such as a drop location) to canvas coordinates.
+    /// Converts a point in the canvas view (such as a drop location) to world coordinates.
     func canvasPoint(forViewPoint point: CGPoint) -> CGPoint {
-        CGPoint(x: (contentOffset.x + point.x) / zoomScale, y: (contentOffset.y + point.y) / zoomScale)
+        CGPoint(x: visibleOrigin.x + point.x / zoomScale, y: visibleOrigin.y + point.y / zoomScale)
     }
 
-    /// Records the scroll view's position. Only changed values are written, to avoid needless redraws.
-    func update(from scrollView: UIScrollView) {
-        guard scrollView.zoomScale > 0 else { return }
-        viewSize = scrollView.bounds.size
-        if abs(zoomScale - scrollView.zoomScale) > 0.0001 { zoomScale = scrollView.zoomScale }
-        if contentOffset != scrollView.contentOffset { contentOffset = scrollView.contentOffset }
+    /// Records the canvas's position. Only changed values are written, to avoid needless redraws.
+    func update(from canvas: FittingCanvasView) {
+        guard canvas.zoomScale > 0 else { return }
+        viewSize = canvas.bounds.size
+        if abs(zoomScale - canvas.zoomScale) > 0.0001 { zoomScale = canvas.zoomScale }
+        let origin = canvas.visibleWorldOrigin
+        if origin != visibleOrigin { visibleOrigin = origin }
     }
 
-    /// Centers the view on a point at a zoom level.
-    func show(center: CGPoint, zoom: CGFloat, animated: Bool = true) {
-        guard let scrollView, scrollView.bounds.width > 0 else { return }
-        let zoom = min(max(zoom, Self.minimumZoom), Self.maximumZoom)
-        let bounds = scrollView.bounds.size
-        let contentSize = CGSize(width: worldSize.width * zoom, height: worldSize.height * zoom)
-        let offset = CGPoint(
-            x: min(max(center.x * zoom - bounds.width / 2, 0), max(contentSize.width - bounds.width, 0)),
-            y: min(max(center.y * zoom - bounds.height / 2, 0), max(contentSize.height - bounds.height, 0))
-        )
-        let move = {
-            scrollView.zoomScale = zoom
-            scrollView.contentOffset = offset
-        }
-        if animated {
-            UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: move) { _ in
-                self.update(from: scrollView)
-            }
-        } else {
-            move()
-            update(from: scrollView)
-        }
+    /// Centers the view on a world point at a zoom level.
+    func show(center: CGPoint, zoom: CGFloat) {
+        guard let canvas else { return }
+        canvas.showWorld(center: center, zoom: min(max(zoom, Self.minimumZoom), Self.maximumZoom))
+        update(from: canvas)
     }
 
     /// Changes the zoom while keeping the middle of the screen in place.
@@ -90,9 +67,9 @@ final class CanvasViewport {
 
     /// Zooms to show everything in `rect`, with a margin.
     func fit(_ rect: CGRect) {
-        guard let scrollView, !rect.isEmpty else { return }
+        guard viewSize.width > 0, !rect.isEmpty else { return }
         let padded = rect.insetBy(dx: -80, dy: -80)
-        let zoom = min(scrollView.bounds.width / padded.width, scrollView.bounds.height / padded.height)
+        let zoom = min(viewSize.width / padded.width, viewSize.height / padded.height)
         show(center: CGPoint(x: padded.midX, y: padded.midY), zoom: zoom)
     }
 }
@@ -126,18 +103,25 @@ struct PencilCanvasView: UIViewRepresentable {
         canvas.layout = layout
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        canvas.drawing = DrawingRenderer.drawing(from: drawingData)
         canvas.delegate = context.coordinator
         canvas.contentInsetAdjustmentBehavior = .never
         canvas.drawingPolicy = .pencilOnly
+        #if DEBUG
+        // UI tests run in the simulator, which has no Apple Pencil.
+        if ProcessInfo.processInfo.arguments.contains("-uiTestingFingerDrawing") {
+            canvas.drawingPolicy = .anyInput
+        }
+        #endif
         if alwaysLight {
             canvas.overrideUserInterfaceStyle = .light
         }
-
-        if let viewport {
-            viewport.scrollView = canvas
-            if case .world(let size, _) = layout { viewport.worldSize = size }
+        canvas.setWorldDrawing(DrawingRenderer.drawing(from: drawingData))
+        canvas.onWindowMoved = { [weak coordinator = context.coordinator, weak canvas] in
+            guard let canvas else { return }
+            coordinator?.parent.viewport?.update(from: canvas)
         }
+
+        viewport?.canvas = canvas
 
         // With the picker's Text tool, a Pencil tap places a text box.
         let textTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.placeText(_:)))
@@ -173,10 +157,10 @@ struct PencilCanvasView: UIViewRepresentable {
         context.coordinator.parent = self
         canvas.layout = layout
 
-        // Reload only when the stored data changed somewhere else, such as an iCloud sync.
+        // Reload only when the stored data changed somewhere else, such as an iCloud sync or Undo.
         if drawingData != context.coordinator.lastData {
             context.coordinator.lastData = drawingData
-            canvas.drawing = DrawingRenderer.drawing(from: drawingData)
+            canvas.setWorldDrawing(DrawingRenderer.drawing(from: drawingData))
         }
 
         // With the Text tool selected, taps place text boxes instead of drawing.
@@ -200,6 +184,7 @@ struct PencilCanvasView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ canvas: FittingCanvasView, coordinator: Coordinator) {
+        coordinator.flushPendingSave(canvas)
         coordinator.parent.session.toolPicker.removeObserver(canvas)
         coordinator.parent.session.toolPicker.removeObserver(coordinator)
     }
@@ -221,11 +206,13 @@ struct PencilCanvasView: UIViewRepresentable {
         // MARK: Scrolling and zooming
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            parent.viewport?.update(from: scrollView)
+            guard let canvas = scrollView as? FittingCanvasView else { return }
+            parent.viewport?.update(from: canvas)
         }
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            parent.viewport?.update(from: scrollView)
+            guard let canvas = scrollView as? FittingCanvasView else { return }
+            parent.viewport?.update(from: canvas)
         }
 
         // MARK: Drawing
@@ -244,11 +231,32 @@ struct PencilCanvasView: UIViewRepresentable {
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            (canvasView as? FittingCanvasView)?.updateContentSize()
-            let data = DrawingRenderer.data(for: canvasView.drawing)
+            guard let canvas = canvasView as? FittingCanvasView, !canvas.isReplacingDrawing else { return }
+            canvas.updateContentSize()
+            // Serializing a large drawing on every stroke slows writing down, so save after a short pause.
+            pendingSave?.cancel()
+            pendingSave = Task { [weak self, weak canvas] in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, let canvas else { return }
+                self?.save(canvas)
+            }
+        }
+
+        private var pendingSave: Task<Void, Never>?
+
+        func save(_ canvas: FittingCanvasView) {
+            pendingSave?.cancel()
+            pendingSave = nil
+            let data = DrawingRenderer.data(for: canvas.drawing)
+            guard data != lastData else { return }
             lastData = data
             parent.onDrawingChange(data)
-            parent.onDrawingBoundsChange?(canvasView.drawing.bounds)
+            parent.onDrawingBoundsChange?(canvas.drawing.bounds)
+        }
+
+        /// Saves any change that's still waiting, such as when the editor closes.
+        func flushPendingSave(_ canvas: FittingCanvasView) {
+            if pendingSave != nil { save(canvas) }
         }
 
         func toolPickerSelectedToolItemDidChange(_ toolPicker: PKToolPicker) {
@@ -261,20 +269,16 @@ struct PencilCanvasView: UIViewRepresentable {
         // MARK: Taps
 
         @objc func deselect(_ recognizer: UITapGestureRecognizer) {
-            if let onFingerTap = parent.onFingerTap,
-               let canvas = recognizer.view as? PKCanvasView, canvas.zoomScale > 0 {
-                let location = recognizer.location(in: canvas)
-                onFingerTap(CGPoint(x: location.x / canvas.zoomScale, y: location.y / canvas.zoomScale))
+            if let onFingerTap = parent.onFingerTap, let canvas = recognizer.view as? FittingCanvasView {
+                onFingerTap(canvas.worldPoint(for: recognizer.location(in: canvas)))
             } else if parent.session.selectedItemID != nil {
                 parent.session.selectedItemID = nil
             }
         }
 
         @objc func placeText(_ recognizer: UITapGestureRecognizer) {
-            guard let canvas = recognizer.view as? PKCanvasView, canvas.zoomScale > 0 else { return }
-            // Locations in a scroll view already include the scroll offset.
-            let location = recognizer.location(in: canvas)
-            parent.onPlaceText?(CGPoint(x: location.x / canvas.zoomScale, y: location.y / canvas.zoomScale))
+            guard let canvas = recognizer.view as? FittingCanvasView else { return }
+            parent.onPlaceText?(canvas.worldPoint(for: recognizer.location(in: canvas)))
         }
 
         /// Makes PencilKit's built-in tap recognizers wait for ours to fail. Ours always succeed on a
@@ -303,6 +307,11 @@ final class FittingCanvasView: PKCanvasView {
         }
     }
 
+    /// Set while the drawing is replaced in code, so the change isn't saved as an edit.
+    private(set) var isReplacingDrawing = false
+    /// Called after the view is moved or zoomed in code.
+    var onWindowMoved: (() -> Void)?
+
     /// Hides Select All and Insert Space from PencilKit's edit menu. Lasso actions like Copy and Delete stay.
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         let name = NSStringFromSelector(action)
@@ -315,6 +324,44 @@ final class FittingCanvasView: PKCanvasView {
     /// Extra space below the lowest stroke on an infinite canvas, in drawing coordinates.
     private let overscroll: CGFloat = 800
     private var lastFittedWidth: CGFloat = 0
+
+    // MARK: Drawing
+
+    /// Replaces the drawing with one loaded from storage, without treating it as an edit.
+    func setWorldDrawing(_ world: PKDrawing) {
+        isReplacingDrawing = true
+        drawing = world
+        isReplacingDrawing = false
+    }
+
+    /// Converts a location in this view (which includes the scroll offset) to drawing coordinates.
+    func worldPoint(for location: CGPoint) -> CGPoint {
+        guard zoomScale > 0 else { return location }
+        return CGPoint(x: location.x / zoomScale, y: location.y / zoomScale)
+    }
+
+    /// The drawing coordinate at the top-leading corner of the screen.
+    var visibleWorldOrigin: CGPoint {
+        worldPoint(for: contentOffset)
+    }
+
+    // MARK: World canvas
+
+    /// Centers the screen on a world point at a zoom level.
+    func showWorld(center: CGPoint, zoom: CGFloat) {
+        guard case .world(let worldSize, _) = layout, bounds.width > 0 else { return }
+        // Zooming out stops once the whole world fits on screen.
+        minimumZoomScale = max(CanvasViewport.minimumZoom, max(bounds.width / worldSize.width, bounds.height / worldSize.height))
+        maximumZoomScale = CanvasViewport.maximumZoom
+        zoomScale = min(max(zoom, minimumZoomScale), maximumZoomScale)
+        updateContentSize()
+        let offset = CGPoint(x: center.x * zoomScale - bounds.width / 2, y: center.y * zoomScale - bounds.height / 2)
+        contentOffset = CGPoint(
+            x: min(max(offset.x, 0), max(contentSize.width - bounds.width, 0)),
+            y: min(max(offset.y, 0), max(contentSize.height - bounds.height, 0))
+        )
+        onWindowMoved?()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -330,28 +377,24 @@ final class FittingCanvasView: PKCanvasView {
             minimumZoomScale = fitScale
             maximumZoomScale = fitScale
             zoomScale = fitScale
+            updateContentSize()
         case .infinite(let width):
             let fitScale = bounds.width / width
             isScrollEnabled = true
             minimumZoomScale = fitScale
             maximumZoomScale = fitScale * 4
             zoomScale = fitScale
+            updateContentSize()
         case .world(_, let focus):
             isScrollEnabled = true
-            minimumZoomScale = CanvasViewport.minimumZoom
-            maximumZoomScale = CanvasViewport.maximumZoom
-            guard isFirstLayout else { return }
-            zoomScale = 1
-            updateContentSize()
-            // Open with `focus` in the middle of the screen.
-            let offset = CGPoint(x: focus.x * zoomScale - bounds.width / 2, y: focus.y * zoomScale - bounds.height / 2)
-            contentOffset = CGPoint(
-                x: min(max(offset.x, 0), max(contentSize.width - bounds.width, 0)),
-                y: min(max(offset.y, 0), max(contentSize.height - bounds.height, 0))
-            )
-            return
+            if isFirstLayout {
+                showWorld(center: focus, zoom: 1)
+            } else if zoomScale > 0 {
+                // The view was resized, such as on rotation; keep the same spot in the middle.
+                let center = worldPoint(for: CGPoint(x: contentOffset.x + bounds.width / 2, y: contentOffset.y + bounds.height / 2))
+                showWorld(center: center, zoom: zoomScale)
+            }
         }
-        updateContentSize()
     }
 
     /// Content size is expressed in zoomed coordinates.

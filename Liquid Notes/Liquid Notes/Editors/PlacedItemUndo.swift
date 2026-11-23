@@ -67,10 +67,10 @@ enum PlacedItemUndo {
         let isEmptyTextBox = item.kind == .text && item.richText.characters.allSatisfy(\.isWhitespace)
         if isEmptyTextBox {
             undoManager?.removeAllActions(withTarget: item)
-            context.delete(item)
+            remove(item, from: context)
         } else {
             let snapshot = Snapshot(item)
-            context.delete(item)
+            remove(item, from: context)
             recordDeletion(of: [snapshot], context: context, undoManager: undoManager)
             undoManager?.setActionName(item.kind == .image ? String(localized: "Delete Image") : String(localized: "Delete Text Box"))
         }
@@ -93,6 +93,14 @@ enum PlacedItemUndo {
         undoManager?.setActionName(actionName)
     }
 
+    /// Detaches an item before deleting it, so its page or canvas stops listing it right away
+    /// rather than at the next save.
+    private static func remove(_ item: PlacedItem, from context: ModelContext) {
+        item.page = nil
+        item.notepad = nil
+        context.delete(item)
+    }
+
     // Undoing an insertion records a deletion, and the other way round, which gives Redo for free.
 
     private static func recordInsertion(of items: [PlacedItem], context: ModelContext, undoManager: UndoManager?) {
@@ -101,7 +109,7 @@ enum PlacedItemUndo {
                 guard !item.isDeleted, item.modelContext != nil else { return }
                 let snapshot = Snapshot(item)
                 let notepad = item.owningNotepad
-                context.delete(item)
+                remove(item, from: context)
                 notepad?.touch()
                 recordDeletion(of: [snapshot], context: context, undoManager: undoManager)
             }

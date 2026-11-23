@@ -93,6 +93,37 @@ struct Liquid_NotesTests {
         #expect(small == CGSize(width: 100, height: 50))
     }
 
+    @Test func addingAndMovingItemsCanBeUndoneAndRedone() throws {
+        let context = try makeContext()
+        let canvas = Notepad(title: "Ideas", type: .canvas)
+        context.insert(canvas)
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+
+        let image = PlacedItem(kind: .image, frame: CGRect(x: 10, y: 10, width: 100, height: 100))
+        image.imageData = Data([1, 2, 3])
+        undoManager.beginUndoGrouping()
+        PlacedItemUndo.insert([image], onCanvas: canvas, context: context, undoManager: undoManager, actionName: "Add Image")
+        undoManager.endUndoGrouping()
+        #expect(canvas.canvasItems?.count == 1)
+
+        undoManager.beginUndoGrouping()
+        PlacedItemUndo.setFrame(image, to: CGRect(x: 300, y: 300, width: 100, height: 100), undoManager: undoManager, actionName: "Move Image")
+        undoManager.endUndoGrouping()
+        #expect(image.x == 300)
+
+        undoManager.undo()
+        #expect(image.x == 10, "Undo puts a moved item back")
+
+        undoManager.undo()
+        #expect(canvas.canvasItems?.isEmpty ?? true, "Undo removes an added item")
+
+        undoManager.redo()
+        let restored = try #require(canvas.canvasItems?.first)
+        #expect(restored.itemID == image.itemID, "Redo brings the same item back")
+        #expect(restored.imageData == Data([1, 2, 3]))
+    }
+
     @Test func tapSelectsTheMostRecentPhotoUnderIt() {
         let older = PlacedItem(kind: .image, frame: CGRect(x: 0, y: 0, width: 200, height: 200))
         older.created = .now.addingTimeInterval(-60)

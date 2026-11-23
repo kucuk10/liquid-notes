@@ -55,19 +55,22 @@ struct CanvasItemsOverlay: View {
 
     var body: some View {
         let zoom = viewport.zoomScale
-        let offset = viewport.contentOffset
+        let visible = viewport.visibleRect
+        // The layer covers only the screen, not the whole canvas: a canvas-sized layer would need
+        // an enormous GPU texture. Items well off screen are skipped, so scrolling stays fast.
+        let nearby = visible.insetBy(dx: -visible.width / 2, dy: -visible.height / 2)
         PlacedItemsLayer(
-            items: items,
+            items: items.filter { $0.frame.intersects(nearby) || $0.itemID == session.selectedItemID },
             layer: layer,
-            logicalSize: worldSize,
+            logicalSize: visible.size,
             scale: zoom,
             session: session,
-            scalesContent: false,
+            origin: visible.origin,
+            itemBounds: worldSize,
             onDelete: onDelete
         )
-        .scaleEffect(zoom, anchor: .topLeading)
-        .offset(x: -offset.x, y: -offset.y)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
 }
 

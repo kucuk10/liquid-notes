@@ -6,6 +6,7 @@ import SwiftData
 struct NotebookView: View {
     @Bindable var notepad: Notepad
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.undoManager) private var undoManager
     @State private var renderer: PDFPageRenderer?
     @State private var session = EditorSession()
     /// The page that toolbar actions, like Add Text Box, apply to.
@@ -126,18 +127,21 @@ struct NotebookView: View {
     }
 
     private func insert(_ items: [PlacedItem], on page: NotebookPage) {
-        for item in items {
-            modelContext.insert(item)
-            item.page = page
-        }
+        let isImage = items.first?.kind == .image
+        PlacedItemUndo.insert(
+            items,
+            onPage: page,
+            context: modelContext,
+            undoManager: undoManager,
+            actionName: isImage ? String(localized: "Add Image") : String(localized: "Add Text Box")
+        )
         notepad.touch()
         notepad.ensureTrailingBlankPage()
     }
 
     private func delete(_ item: PlacedItem) {
         session.forget(item)
-        modelContext.delete(item)
-        notepad.touch()
+        PlacedItemUndo.delete(item, context: modelContext, undoManager: undoManager)
     }
 }
 
