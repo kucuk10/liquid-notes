@@ -166,6 +166,41 @@ final class Liquid_NotesUITests: XCTestCase {
                       "A new note opens in the editor")
     }
 
+    /// Search is in the top bar of the first screen, not the bottom, and finds notepads.
+    @MainActor
+    func testSearchIsAtTheTopAndFindsNotepads() throws {
+        // Starts with one canvas to find. Back out to the first screen of the library.
+        let app = launchApp(["-uiTestingOpenNewCanvas"])
+        let back = app.buttons["BackButton"].firstMatch
+        _ = back.waitForExistence(timeout: 5)
+        while back.exists && back.isHittable { back.tap() }
+
+        let search = app.searchFields.firstMatch.exists ? app.searchFields.firstMatch : app.buttons["Search"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "The library shows search")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertLessThan(search.frame.midY, app.frame.height / 3, "Search is at the top of the screen")
+
+        search.tap()
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.typeText("Untitled\n")
+        XCTAssertTrue(app.staticTexts["Untitled Canvas"].firstMatch.waitForExistence(timeout: 5),
+                      "Searching finds the canvas")
+
+        // The results list keeps search at the top too.
+        let results = XCTAttachment(screenshot: app.screenshot())
+        results.lifetime = .keepAlways
+        add(results)
+        let newNote = app.buttons["New Note"].firstMatch
+        XCTAssertTrue(newNote.waitForExistence(timeout: 5))
+        let listSearch = app.searchFields.firstMatch.exists ? app.searchFields.firstMatch : app.buttons["Search"].firstMatch
+        XCTAssertTrue(listSearch.exists)
+        XCTAssertLessThan(listSearch.frame.minX, newNote.frame.minX, "Search comes before New")
+        XCTAssertLessThan(listSearch.frame.midY, app.frame.height / 3, "The list's search is at the top")
+    }
+
     /// The Mac has no Apple Pencil, so the canvas offers mouse drawing there instead of the Pencil tools.
     @MainActor
     func testCanvasToolbarMatchesThePlatform() throws {

@@ -18,7 +18,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $collection)
+            SidebarView(selection: $collection, searchText: $searchText)
         } content: {
             if let collection {
                 NotepadListView(

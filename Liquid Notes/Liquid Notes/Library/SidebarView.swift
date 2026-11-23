@@ -4,8 +4,11 @@ import SwiftData
 /// The first column: smart collections, notepad types and folders.
 struct SidebarView: View {
     @Binding var selection: LibraryCollection?
+    /// Shared with the notepad list, which shows the results.
+    @Binding var searchText: String
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query(sort: \Folder.name) private var folders: [Folder]
     @Query private var notepads: [Notepad]
 
@@ -52,6 +55,21 @@ struct SidebarView: View {
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 240)
         .navigationTitle("Liquid Notes")
+        // The sidebar is the first screen on iPhone, so search starts here too. Results appear in
+        // the notepad list: live beside the sidebar on iPad and Mac, or after pressing Search on iPhone.
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search all notepads"
+        )
+        .onSubmit(of: .search) {
+            if selection == nil { selection = .all }
+        }
+        .onChange(of: searchText) { _, text in
+            if selection == nil && !text.isEmpty && horizontalSizeClass == .regular {
+                selection = .all
+            }
+        }
         .alert("New Folder", isPresented: $isAddingFolder) {
             TextField("Name", text: $newFolderName)
             Button("Cancel", role: .cancel) {}

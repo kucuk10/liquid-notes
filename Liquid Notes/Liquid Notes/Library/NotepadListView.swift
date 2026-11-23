@@ -62,7 +62,13 @@ struct NotepadListView: View {
         .searchable(text: $searchText, prompt: "Search all notepads")
         .navigationSplitViewColumnWidth(min: 240, ideal: 320)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            // Search sits at the top, before New, rather than in iPhone's bottom bar. The Mac
+            // toolbar already shows search at the top, and moving it there crashes AppKit because
+            // the search button has no title.
+            if !ProcessInfo.processInfo.isMacCatalystApp {
+                DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 NewNotepadMenu(preferredType: collection.preferredType, actions: actions)
             }
         }
