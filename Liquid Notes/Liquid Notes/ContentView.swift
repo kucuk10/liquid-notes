@@ -50,6 +50,10 @@ struct ContentView: View {
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("-uiTestingOpenNewCanvas") {
                 actions.newNotepad(.canvas)
+                // At launch the split view finishes its first layout after this and brings the
+                // library back in portrait, so hide it again once that's done.
+                try? await Task.sleep(for: .milliseconds(500))
+                columnVisibility = .detailOnly
             } else if arguments.contains("-uiTestingOpenNewNotebook") {
                 actions.newNotepad(.notebook)
             }

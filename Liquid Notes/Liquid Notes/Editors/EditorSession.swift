@@ -14,29 +14,50 @@ final class EditorSession {
     var textTarget: RichTextTarget?
     /// The point size of the selected text, shown in the toolbar. `nil` when sizes are mixed.
     var currentFontSize: CGFloat?
-    /// An item being moved or resized. Photos and their handles are drawn in different layers,
-    /// so the drag lives here where both can follow it.
-    var activeDrag: ItemDrag?
+    /// The item being moved or resized. Photos and their handles are drawn in different layers,
+    /// so the drag lives here where both can follow it. It's kept apart from the drag amounts:
+    /// every item reads this, but only the dragged one reads the amounts, so the other items
+    /// don't redraw on every frame of a drag.
+    private(set) var draggedItemID: UUID?
+    private var dragMove: CGSize = .zero
+    private var dragResize: CGSize = .zero
 
     /// The in-progress move and resize for an item, in drawing coordinates.
     struct ItemDrag {
-        let itemID: UUID
         var move: CGSize = .zero
         var resize: CGSize = .zero
     }
 
     func drag(for item: PlacedItem) -> ItemDrag? {
-        activeDrag?.itemID == item.itemID ? activeDrag : nil
+        guard draggedItemID == item.itemID else { return nil }
+        return ItemDrag(move: dragMove, resize: dragResize)
+    }
+
+    func updateDrag(of item: PlacedItem, move: CGSize = .zero, resize: CGSize = .zero) {
+        draggedItemID = item.itemID
+        dragMove = move
+        dragResize = resize
+    }
+
+    func endDrag() {
+        draggedItemID = nil
+        dragMove = .zero
+        dragResize = .zero
     }
 
     /// One tool picker shared by every canvas in the editor, such as all pages of a notebook.
     let toolPicker: PKToolPicker
-    /// Whether the PencilKit tools are shown. On Mac they come and go with mouse drawing.
+    /// Whether the PencilKit tools are shown. On Mac they come and go with trackpad drawing.
     var showsToolPicker = !ProcessInfo.processInfo.isMacCatalystApp
-    /// Whether a mouse or trackpad draws, for Mac, which has no Apple Pencil. Otherwise only
-    /// Apple Pencil draws, and pointer clicks select and place text.
-    var drawsWithPointer = false {
-        didSet { showsToolPicker = drawsWithPointer }
+    /// Whether a finger draws on iPhone and iPad, or the trackpad or mouse on Mac. Otherwise only
+    /// Apple Pencil draws, and touches and clicks scroll, select and place text.
+    var drawsWithTouch = false {
+        didSet {
+            // Drawing needs the tools. On Mac, which has no Pencil button, they also leave with it.
+            if drawsWithTouch || ProcessInfo.processInfo.isMacCatalystApp {
+                showsToolPicker = drawsWithTouch
+            }
+        }
     }
     /// The canvas that receives the tool picker.
     var activeCanvasID: AnyHashable?

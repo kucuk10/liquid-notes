@@ -196,8 +196,8 @@ struct SketchEditorView: View {
                         dismiss()
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    DrawingToolsToggle(session: session)
+                ToolbarItemGroup(placement: .primaryAction) {
+                    DrawingToolsToggles(session: session)
                 }
             }
             .onAppear { session.activeCanvasID = "sketch" }

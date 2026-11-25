@@ -95,8 +95,7 @@ final class Notepad {
     var summary: String {
         switch type {
         case .notes:
-            let body = plainText
-                .split(whereSeparator: \.isNewline)
+            let body = Self.lines(of: plainText)
                 .dropFirst()
                 .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             return body.map(String.init) ?? String(localized: "No additional text")
@@ -128,10 +127,21 @@ final class Notepad {
 
     /// Like Apple Notes, a note's title is its first non-empty line.
     static func title(fromPlainText text: String) -> String {
-        let firstLine = text
-            .split(whereSeparator: \.isNewline)
+        let firstLine = lines(of: text)
             .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         return String(firstLine?.trimmingCharacters(in: .whitespaces).prefix(120) ?? "")
+    }
+
+    /// A text's non-empty lines, like `split(whereSeparator: \.isNewline)`, but found one at a time.
+    /// Titles and summaries only need the first few, so a long note isn't split up in full.
+    private static func lines(of text: String) -> some Sequence<Substring> {
+        sequence(state: text[...]) { remainder -> Substring? in
+            remainder = remainder.drop(while: \.isNewline)
+            guard !remainder.isEmpty else { return nil }
+            let end = remainder.firstIndex(where: \.isNewline) ?? remainder.endIndex
+            defer { remainder = remainder[end...] }
+            return remainder[..<end]
+        }
     }
 
     // MARK: Notebook pages

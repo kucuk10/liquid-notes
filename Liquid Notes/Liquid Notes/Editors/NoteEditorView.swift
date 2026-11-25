@@ -11,6 +11,10 @@ struct NoteEditorView: View {
     @State private var selection = AttributedTextSelection()
     @State private var session = EditorSession(includesTextTool: false)
     @State private var editorWidth: CGFloat = 0
+    /// Typing saves after a short pause rather than on every keystroke, since saving encodes the
+    /// whole note.
+    @State private var pendingSave: Task<Void, Never>?
+    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var isEditorFocused: Bool
 
     /// Text stays at a readable line length on wide screens, like Apple Notes.
@@ -31,7 +35,7 @@ struct NoteEditorView: View {
                 .contentMargins(.vertical, 12, for: .scrollContent)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { editorWidth = $0 }
 
-            if !notepad.sortedAttachments.isEmpty {
+            if !(notepad.attachments?.isEmpty ?? true) {
                 Divider()
                 AttachmentStrip(notepad: notepad)
             }
@@ -52,11 +56,14 @@ struct NoteEditorView: View {
             Task { addImages(await ImageProcessing.preparedImagesInBackground(from: originals)) }
             return !images.isEmpty
         }
-        .onChange(of: text) { _, newValue in
-            notepad.updateRichText(newValue)
+        .onChange(of: text) {
+            scheduleSave()
             reportFontSize()
         }
         .onChange(of: selection) { reportFontSize() }
+        // Anything still waiting is saved when the note closes or the app goes to the background.
+        .onChange(of: scenePhase) { if scenePhase != .active { savePendingText() } }
+        .onDisappear(perform: savePendingText)
         .onAppear {
             // The note's text is always what the formatting buttons change.
             session.textTarget = RichTextTarget(id: "note", text: $text, selection: $selection)
@@ -68,6 +75,22 @@ struct NoteEditorView: View {
 
     private var horizontalMargin: CGFloat {
         max(16, (editorWidth - readableWidth) / 2)
+    }
+
+    private func scheduleSave() {
+        pendingSave?.cancel()
+        pendingSave = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            savePendingText()
+        }
+    }
+
+    private func savePendingText() {
+        guard let save = pendingSave else { return }
+        save.cancel()
+        pendingSave = nil
+        notepad.updateRichText(text)
     }
 
     /// Keeps the toolbar's size readout in step with the selection.

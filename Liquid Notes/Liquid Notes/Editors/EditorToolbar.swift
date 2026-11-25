@@ -51,19 +51,22 @@ struct UndoRedoButtons: View {
     }
 }
 
-/// Turns drawing tools on and off. On iPad, Apple Pencil always draws and this shows the
-/// PencilKit tools. Mac has no Apple Pencil, so there it turns drawing with the mouse on and off.
-struct DrawingToolsToggle: View {
+/// The drawing buttons. On iPhone and iPad: the Apple Pencil tools, and a separate button that
+/// lets your finger draw too. Mac has no Apple Pencil, so there's one button to draw with the trackpad.
+struct DrawingToolsToggles: View {
     @Bindable var session: EditorSession
 
     var body: some View {
         if ProcessInfo.processInfo.isMacCatalystApp {
-            Toggle(isOn: $session.drawsWithPointer) {
-                Label("Draw with Mouse", systemImage: "hand.draw")
+            Toggle(isOn: $session.drawsWithTouch) {
+                Label("Draw with Trackpad", systemImage: "hand.draw")
             }
         } else {
             Toggle(isOn: $session.showsToolPicker) {
                 Label("Apple Pencil Tools", systemImage: "pencil.tip.crop.circle")
+            }
+            Toggle(isOn: $session.drawsWithTouch) {
+                Label("Draw with Touch", systemImage: "hand.draw")
             }
         }
     }
@@ -143,7 +146,7 @@ private struct EditorToolbarModifier: ViewModifier {
                     ToolbarItem(placement: .primaryAction) { contextTools[1] }
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
-                ToolbarItem(placement: .primaryAction) { leadingButton }
+                ToolbarItemGroup(placement: .primaryAction) { leadingButton }
                     .visibilityPriority(ToolbarItemVisibilityPriority(higherThan: .high))
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 ToolbarItemGroup(placement: .primaryAction) { textTools }
@@ -176,7 +179,7 @@ private struct EditorToolbarModifier: ViewModifier {
     private var leadingButton: some View {
         switch leadingTool {
         case .pencil:
-            DrawingToolsToggle(session: session)
+            DrawingToolsToggles(session: session)
         case .sketch:
             Button("Sketch", systemImage: "pencil.and.scribble") {
                 isSketching = true

@@ -103,6 +103,9 @@ struct PencilCanvasView: UIViewRepresentable {
         NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
     ]
 
+    /// Apple Pencil, which always draws.
+    private static let drawingTouches = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -166,6 +169,11 @@ struct PencilCanvasView: UIViewRepresentable {
         }
 
         canvas.drawingPolicy = drawsWithAnyInput ? .anyInput : .pencilOnly
+        // On Mac, PencilKit lets the trackpad draw even with the Pencil-only policy, so also limit
+        // which touches the drawing gesture accepts. Set after the policy, which may reset them.
+        canvas.drawingGestureRecognizer.allowedTouchTypes = drawsWithAnyInput
+            ? Self.drawingTouches + Self.fingerAndPointerTouches
+            : Self.drawingTouches
 
         // With the Text tool selected, taps place text boxes instead of drawing.
         let placesText = session.isTextToolSelected && onPlaceText != nil
@@ -187,13 +195,9 @@ struct PencilCanvasView: UIViewRepresentable {
         context.coordinator.wantsTools = wantsTools
     }
 
-    /// Apple Pencil always draws. A mouse or trackpad draws only when you turn that on.
+    /// Apple Pencil always draws. A finger, trackpad or mouse draws only when you turn that on.
     private var drawsWithAnyInput: Bool {
-        #if DEBUG
-        // UI tests run in the simulator, which has no Apple Pencil.
-        if ProcessInfo.processInfo.arguments.contains("-uiTestingFingerDrawing") { return true }
-        #endif
-        return session.drawsWithPointer
+        session.drawsWithTouch
     }
 
     static func dismantleUIView(_ canvas: FittingCanvasView, coordinator: Coordinator) {
@@ -246,25 +250,35 @@ struct PencilCanvasView: UIViewRepresentable {
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             guard let canvas = canvasView as? FittingCanvasView, !canvas.isReplacingDrawing else { return }
             canvas.updateContentSize()
-            // Serializing a large drawing on every stroke slows writing down, so save after a short pause.
+            // Serializing a large drawing on every stroke slows writing down, so save after a short
+            // pause, and serialize in the background so the next stroke isn't held up.
             pendingSave?.cancel()
             pendingSave = Task { [weak self, weak canvas] in
                 try? await Task.sleep(for: .milliseconds(400))
-                guard !Task.isCancelled, let canvas else { return }
-                self?.save(canvas)
+                guard !Task.isCancelled, let drawing = canvas?.drawing else { return }
+                let data = await Task.detached(priority: .userInitiated) {
+                    DrawingRenderer.data(for: drawing)
+                }.value
+                // A newer stroke replaces this save with its own.
+                guard !Task.isCancelled else { return }
+                self?.store(data, bounds: drawing.bounds)
             }
         }
 
         private var pendingSave: Task<Void, Never>?
 
+        /// Saves the drawing right away, such as when the editor closes.
         func save(_ canvas: FittingCanvasView) {
+            store(DrawingRenderer.data(for: canvas.drawing), bounds: canvas.drawing.bounds)
+        }
+
+        private func store(_ data: Data?, bounds: CGRect) {
             pendingSave?.cancel()
             pendingSave = nil
-            let data = DrawingRenderer.data(for: canvas.drawing)
             guard data != lastData else { return }
             lastData = data
             parent.onDrawingChange(data)
-            parent.onDrawingBoundsChange?(canvas.drawing.bounds)
+            parent.onDrawingBoundsChange?(bounds)
         }
 
         /// Saves any change that's still waiting, such as when the editor closes.

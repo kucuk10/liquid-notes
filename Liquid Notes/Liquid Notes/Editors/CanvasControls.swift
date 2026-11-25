@@ -10,15 +10,18 @@ enum CanvasZoomLevels {
     }
 }
 
-/// Shows the canvas's zoom as a percentage. Tapping it offers preset levels and Zoom to Fit.
+/// Shows a zoom level as a percentage. Tapping it offers preset levels and a fit option.
+/// Canvases and notebooks share it.
 struct CanvasZoomMenu: View {
     let zoom: CGFloat
+    var levels: [CGFloat] = CanvasZoomLevels.presets
+    var fitTitle: LocalizedStringKey = "Zoom to Fit"
     let onSelect: (CGFloat) -> Void
     let onZoomToFit: () -> Void
 
     var body: some View {
         Menu {
-            ForEach(CanvasZoomLevels.presets, id: \.self) { level in
+            ForEach(levels, id: \.self) { level in
                 Button {
                     onSelect(level)
                 } label: {
@@ -30,7 +33,7 @@ struct CanvasZoomMenu: View {
                 }
             }
             Divider()
-            Button("Zoom to Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass", action: onZoomToFit)
+            Button(fitTitle, systemImage: "arrow.up.left.and.down.right.magnifyingglass", action: onZoomToFit)
         } label: {
             Text("\(CanvasZoomLevels.percent(zoom))%")
                 .monospacedDigit()

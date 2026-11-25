@@ -61,9 +61,10 @@ struct CanvasNotepadView: View {
     @ViewBuilder
     private var content: some View {
         if let openingFocus {
+            let items = notepad.sortedCanvasItems
             ZStack(alignment: .topLeading) {
                 // Photos sit under the ink so you can draw on them.
-                itemsOverlay(.photos)
+                itemsOverlay(.photos, items: items)
 
                 PencilCanvasView(
                     canvasID: canvasID,
@@ -80,14 +81,14 @@ struct CanvasNotepadView: View {
                     onPlaceText: { addTextBox(at: $0) },
                     onFingerTap: { point in
                         // Photos are under the ink, so a tap selects the topmost photo there, or deselects.
-                        session.selectedItemID = PlacedItemFactory.topImage(at: point, in: notepad.sortedCanvasItems)?.itemID
+                        session.selectedItemID = PlacedItemFactory.topImage(at: point, in: items)?.itemID
                     },
                     viewport: viewport
                 )
 
                 // Text boxes sit above the ink so you can type over photos. Both item layers follow the
                 // canvas's scrolling and zooming; touches that miss an item go through to the canvas.
-                itemsOverlay(.textAndHandles)
+                itemsOverlay(.textAndHandles, items: items)
             }
             .clipped()
             .dropDestination(for: DroppedImage.self) { images, location in
@@ -105,10 +106,10 @@ struct CanvasNotepadView: View {
         }
     }
 
-    private func itemsOverlay(_ layer: PlacedItemsLayer.Layer) -> some View {
+    private func itemsOverlay(_ layer: PlacedItemsLayer.Layer, items: [PlacedItem]) -> some View {
         CanvasItemsOverlay(
             viewport: viewport,
-            items: notepad.sortedCanvasItems,
+            items: items,
             layer: layer,
             worldSize: Self.worldSize,
             session: session,

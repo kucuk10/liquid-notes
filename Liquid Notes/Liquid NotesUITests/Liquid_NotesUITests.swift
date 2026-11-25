@@ -7,6 +7,18 @@
 
 import XCTest
 
+private extension XCUIElement {
+    /// Waits for the element to become enabled, or disabled when `enabled` is false.
+    func waitForEnabled(_ enabled: Bool = true, timeout: TimeInterval = 3) -> Bool {
+        let deadline = Date.now.addingTimeInterval(timeout)
+        while Date.now < deadline {
+            if isEnabled == enabled { return true }
+            RunLoop.current.run(until: .now.addingTimeInterval(0.2))
+        }
+        return isEnabled == enabled
+    }
+}
+
 final class Liquid_NotesUITests: XCTestCase {
 
     override func setUpWithError() throws {
@@ -45,8 +57,9 @@ final class Liquid_NotesUITests: XCTestCase {
     /// app on the first stroke. Draws at several zoom levels and checks the app is still running.
     @MainActor
     func testDrawingOnCanvasAtAnyZoomDoesNotCrash() throws {
-        // The simulator has no Apple Pencil, so this test allows drawing with a finger.
-        let app = launchIntoNewCanvas(["-uiTestingFingerDrawing"])
+        // The simulator has no Apple Pencil, so this test turns on drawing with a finger.
+        let app = launchIntoNewCanvas()
+        tapToolbarButton("Draw with Touch", in: app)
         let zoomButton = app.buttons["Zoom"].firstMatch
 
         func drawStroke() {
@@ -66,6 +79,32 @@ final class Liquid_NotesUITests: XCTestCase {
         let undo = app.buttons["Undo"].firstMatch
         XCTAssertTrue(undo.waitForExistence(timeout: 3))
         XCTAssertTrue(undo.isEnabled, "Strokes should be undoable")
+    }
+
+    /// With Draw with Touch off, a finger doesn't draw; turning it on lets it draw, and off again stops it.
+    @MainActor
+    func testDrawWithTouchTurnsFingerDrawingOnAndOff() throws {
+        let app = launchIntoNewCanvas()
+        let undo = app.buttons["Undo"].firstMatch
+
+        func drawStroke() {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.45))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.6))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+
+        drawStroke()
+        XCTAssertFalse(undo.isEnabled, "A finger doesn't draw until Draw with Touch is on")
+
+        tapToolbarButton("Draw with Touch", in: app)
+        drawStroke()
+        XCTAssertTrue(undo.waitForEnabled(), "With Draw with Touch on, a finger draws")
+
+        undo.tap()
+        XCTAssertTrue(undo.waitForEnabled(false), "Undo removes the stroke")
+        tapToolbarButton("Draw with Touch", in: app)
+        drawStroke()
+        XCTAssertFalse(undo.isEnabled, "Turning Draw with Touch off stops finger drawing")
     }
 
     @MainActor
@@ -174,6 +213,9 @@ final class Liquid_NotesUITests: XCTestCase {
         let back = app.buttons["BackButton"].firstMatch
         _ = back.waitForExistence(timeout: 5)
         while back.exists && back.isHittable { back.tap() }
+        // On iPad the canvas hides the library instead of pushing it, so bring the sidebar back.
+        let showSidebar = app.buttons["Show Sidebar"].firstMatch
+        if showSidebar.waitForExistence(timeout: 2) { showSidebar.tap() }
 
         let search = app.searchFields.firstMatch.exists ? app.searchFields.firstMatch : app.buttons["Search"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "The library shows search")
@@ -201,24 +243,86 @@ final class Liquid_NotesUITests: XCTestCase {
         XCTAssertLessThan(listSearch.frame.midY, app.frame.height / 3, "The list's search is at the top")
     }
 
-    /// The Mac has no Apple Pencil, so the canvas offers mouse drawing there instead of the Pencil tools.
+    /// iPhone and iPad get the Pencil tools plus a separate Draw with Touch button. The Mac has no
+    /// Apple Pencil, so it gets one Draw with Trackpad button instead.
     @MainActor
     func testCanvasToolbarMatchesThePlatform() throws {
         let app = launchIntoNewCanvas()
         XCTAssertTrue(app.buttons["Scenes"].firstMatch.exists)
         XCTAssertTrue(app.buttons["Undo"].firstMatch.exists)
         let pencilTools = app.descendants(matching: .any)["Apple Pencil Tools"].firstMatch
-        let mouseDrawing = app.descendants(matching: .any)["Draw with Mouse"].firstMatch
+        let touchDrawing = app.descendants(matching: .any)["Draw with Touch"].firstMatch
+        let trackpadDrawing = app.descendants(matching: .any)["Draw with Trackpad"].firstMatch
         #if targetEnvironment(macCatalyst)
-        XCTAssertTrue(mouseDrawing.waitForExistence(timeout: 3), "Mac offers drawing with the mouse")
+        XCTAssertTrue(trackpadDrawing.waitForExistence(timeout: 3), "Mac offers drawing with the trackpad")
         XCTAssertFalse(pencilTools.exists, "There's no Apple Pencil on Mac")
+        XCTAssertFalse(touchDrawing.exists)
         #else
         XCTAssertTrue(pencilTools.waitForExistence(timeout: 3), "iPad shows the Apple Pencil tools")
-        XCTAssertFalse(mouseDrawing.exists)
+        XCTAssertTrue(touchDrawing.exists, "Drawing with a finger is its own button")
+        XCTAssertFalse(trackpadDrawing.exists)
         #endif
 
         // Undo and Redo are the same size.
         XCTAssertEqual(app.buttons["Undo"].firstMatch.frame.size, app.buttons["Redo"].firstMatch.frame.size)
+    }
+
+    /// Notebooks open fitted to the screen, and can zoom to the paper's real size and back.
+    @MainActor
+    func testNotebookZoomFitsAndShowsActualSize() throws {
+        let app = launchApp(["-uiTestingOpenNewNotebook"])
+        let create = app.buttons["Create"].firstMatch
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.tap()
+
+        let zoom = app.buttons["Zoom"].firstMatch
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Notebooks have a zoom menu")
+        let page = app.descendants(matching: .any)["Page 1 of 1"].firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: 5))
+        let fittedWidth = page.frame.width
+        XCTAssertLessThanOrEqual(page.frame.height, app.frame.height, "Fit to Screen shows a whole page")
+
+        zoom.tap()
+        XCTAssertTrue(app.buttons["Fit to Screen"].firstMatch.waitForExistence(timeout: 3))
+        app.buttons["150%"].firstMatch.tap()
+        expectation(for: NSPredicate(format: "value == %@", "150 percent"), evaluatedWith: zoom)
+        waitForExpectations(timeout: 5)
+        XCTAssertGreaterThan(page.frame.width, fittedWidth, "Zooming in makes the page bigger")
+
+        zoom.tap()
+        app.buttons["Fit to Screen"].firstMatch.tap()
+        let fitted = NSPredicate { _, _ in abs(page.frame.width - fittedWidth) < 1 }
+        expectation(for: fitted, evaluatedWith: page)
+        waitForExpectations(timeout: 5)
+
+        // Pinching out zooms in.
+        page.pinch(withScale: 1.5, velocity: 1)
+        let pinched = NSPredicate { _, _ in page.frame.width > fittedWidth + 20 }
+        expectation(for: pinched, evaluatedWith: page)
+        waitForExpectations(timeout: 5)
+    }
+
+    /// Text boxes show their text sharply when not being edited, and switch to editing when tapped.
+    @MainActor
+    func testTextBoxShowsTextAndEditsWhenTapped() throws {
+        let app = launchIntoNewCanvas()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)).doubleTap()
+        let editor = app.textViews["Text box"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.typeText("Hello")
+
+        // Tapping empty canvas moves on, and the box shows its text without a text editor.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.85)).tap()
+        let shown = app.descendants(matching: .any)["Text box"].firstMatch
+        XCTAssertTrue(app.textViews.count == 0 || !app.textViews["Text box"].exists, "Only the box being edited uses a text editor")
+        XCTAssertTrue(shown.waitForExistence(timeout: 3))
+
+        // Tapping the text edits it again, with the cursor at the end.
+        shown.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 3))
+        editor.typeText(" there")
+        let typed = app.textViews.matching(NSPredicate(format: "value CONTAINS %@", "Hello there")).firstMatch
+        XCTAssertTrue(typed.waitForExistence(timeout: 5))
     }
 
     @MainActor
